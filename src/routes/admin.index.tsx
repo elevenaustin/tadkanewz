@@ -94,6 +94,30 @@ import {
   type SecurityAccessLog,
 } from "@/lib/security";
 import { stories as initialStories, categories, type Story } from "@/lib/news-data";
+import { supabase } from "@/lib/supabase";
+
+function mapSupabaseRowToSession(row: any): SessionRecord | null {
+  if (!row || !row.session_id) return null;
+  return {
+    sessionId: row.session_id,
+    clientIp: row.client_ip || undefined,
+    maskedIp: row.masked_ip || undefined,
+    firstVisit: row.first_visit,
+    lastActivity: row.last_activity,
+    pageCount: typeof row.page_count === "number" ? row.page_count : 1,
+    deviceCategory: row.device_category || "Desktop",
+    browser: row.browser || "Unknown",
+    os: row.os || "Unknown",
+    screenResolution: "Dynamic",
+    language: "pa",
+    timeZone: "Asia/Kolkata",
+    approxRegion: row.approx_region || "Punjab / India",
+    userLocation: row.user_location || undefined,
+    referrer: row.referrer || "Direct Traffic",
+    consentStatus: row.consent_status || "pending",
+    pagesViewed: Array.isArray(row.pages_viewed) ? row.pages_viewed : [],
+  };
+}
 
 export const Route = createFileRoute("/admin/")({
   head: () => ({
@@ -148,7 +172,60 @@ function AdminDashboardPage() {
     loadData();
     setRetentionDays(getRetentionPeriodDays());
 
-    // 1. Live real-time push events from mobile devices & other browsers
+    const handleIncomingSession = (incoming: SessionRecord) => {
+      if (!incoming || !incoming.sessionId) return;
+      setSessions((prev) => {
+        const idx = prev.findIndex((s) => s.sessionId === incoming.sessionId);
+        let next: SessionRecord[];
+        if (idx >= 0) {
+          next = [...prev];
+          next[idx] = { ...next[idx], ...incoming };
+        } else {
+          next = [incoming, ...prev];
+        }
+        localStorage.setItem("tadkanewz_analytics_sessions_v2", JSON.stringify(next));
+        return next;
+      });
+      setTimeout(() => {
+        setSummary(getAnalyticsSummary());
+      }, 50);
+    };
+
+    // 1. Supabase Realtime WebSocket (PostgreSQL changes + instant Broadcast channel)
+    let supaChannel: any = null;
+    try {
+      supaChannel = supabase
+        .channel("admin-live-sessions")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "sessions" },
+          (payload: any) => {
+            const sess = mapSupabaseRowToSession(payload.new);
+            if (sess) handleIncomingSession(sess);
+          }
+        )
+        .on("broadcast", { event: "session_ping" }, ({ payload }: any) => {
+          if (payload) handleIncomingSession(payload);
+        })
+        .on("broadcast", { event: "clear_all" }, () => {
+          setSessions([]);
+          setSummary(getAnalyticsSummary());
+        })
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "blocked_ips" },
+          () => {
+            fetchRemoteBlockedIps().then((remoteBlocked) => {
+              setBlockedIps(remoteBlocked);
+            });
+          }
+        )
+        .subscribe();
+    } catch (e) {
+      console.error("Supabase Realtime subscribe error:", e);
+    }
+
+    // 2. Secondary failover: Live push events from mobile devices & other browsers via SSE
     let eventSource: EventSource | null = null;
     try {
       eventSource = new EventSource(`https://ntfy.sh/${TELEMETRY_CHANNEL}/sse`);
@@ -163,28 +240,14 @@ function AdminDashboardPage() {
               return;
             }
             if (incoming?.sessionId) {
-              setSessions((prev) => {
-                const idx = prev.findIndex((s) => s.sessionId === incoming.sessionId);
-                let next: SessionRecord[];
-                if (idx >= 0) {
-                  next = [...prev];
-                  next[idx] = { ...next[idx], ...incoming };
-                } else {
-                  next = [incoming, ...prev];
-                }
-                localStorage.setItem("tadkanewz_analytics_sessions_v2", JSON.stringify(next));
-                return next;
-              });
-              setTimeout(() => {
-                setSummary(getAnalyticsSummary());
-              }, 50);
+              handleIncomingSession(incoming);
             }
           }
         } catch {}
       };
     } catch {}
 
-    // 2. Live firewall block updates
+    // 3. Live firewall block updates
     let firewallSource: EventSource | null = null;
     try {
       firewallSource = new EventSource(`https://ntfy.sh/${FIREWALL_CHANNEL}/sse`);
@@ -202,12 +265,15 @@ function AdminDashboardPage() {
       };
     } catch {}
 
-    // 3. Fallback poll every 5 seconds
+    // 4. Fallback poll every 5 seconds
     const pollInterval = setInterval(() => {
       loadData(false);
     }, 5000);
 
     return () => {
+      if (supaChannel) {
+        supabase.removeChannel(supaChannel);
+      }
       if (eventSource) eventSource.close();
       if (firewallSource) firewallSource.close();
       clearInterval(pollInterval);
@@ -368,7 +434,7 @@ function AdminDashboardPage() {
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
               <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-              Live Sync
+              Supabase Realtime Live
             </span>
           </div>
 

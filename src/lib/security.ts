@@ -1,3 +1,5 @@
+import { supabase } from "./supabase";
+
 export const FIREWALL_CHANNEL = "tadkanewz_prod_firewall_live_v5";
 export const SECURITY_CHANNEL = "tadkanewz_prod_security_live_v5";
 
@@ -34,6 +36,22 @@ if (typeof window !== "undefined") {
 
 export async function syncBlockedIpsToCloud(list: BlockedIpRecord[]): Promise<void> {
   if (typeof window === "undefined") return;
+
+  // 1. Primary: Upsert to Supabase PostgreSQL blocked_ips table
+  try {
+    if (list.length > 0) {
+      const rows = list.map((item) => ({
+        id: item.id || `blk_${Date.now()}`,
+        ip: item.ip.trim(),
+        reason: item.reason || "Blocked by Administrator",
+        blocked_by: item.blockedBy || "Admin",
+        blocked_at: item.blockedAt || new Date().toISOString(),
+      }));
+      await supabase.from("blocked_ips").upsert(rows, { onConflict: "ip" });
+    }
+  } catch {}
+
+  // 2. Secondary failover: broadcast via SSE stream
   try {
     await fetch(`https://ntfy.sh/${FIREWALL_CHANNEL}`, {
       method: "POST",
@@ -49,6 +67,24 @@ export async function syncBlockedIpsToCloud(list: BlockedIpRecord[]): Promise<vo
 
 export async function fetchRemoteBlockedIps(): Promise<BlockedIpRecord[]> {
   if (typeof window === "undefined") return getBlockedIps();
+
+  // 1. Primary: Fetch from Supabase blocked_ips table
+  try {
+    const { data, error } = await supabase.from("blocked_ips").select("*");
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const records: BlockedIpRecord[] = data.map((d: any) => ({
+        id: d.id,
+        ip: d.ip,
+        reason: d.reason || "Blocked by Administrator",
+        blockedAt: d.blocked_at || new Date().toISOString(),
+        blockedBy: d.blocked_by || "Admin",
+      }));
+      localStorage.setItem(BLOCKED_IPS_KEY, JSON.stringify(records));
+      return records;
+    }
+  } catch {}
+
+  // 2. Secondary failover: ntfy
   try {
     const res = await fetch(`https://ntfy.sh/${FIREWALL_CHANNEL}/json?poll=1&since=all`, {
       headers: { Accept: "application/json" },
@@ -177,6 +213,7 @@ export function unblockIp(ip: string): boolean {
 
   if (typeof window !== "undefined") {
     localStorage.setItem(BLOCKED_IPS_KEY, JSON.stringify(filtered));
+    supabase.from("blocked_ips").delete().eq("ip", cleanIp).then(() => {}).catch(() => {});
     syncBlockedIpsToCloud(filtered);
   }
   return true;

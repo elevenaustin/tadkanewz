@@ -1,5 +1,6 @@
 import { getConsentPreferences } from "./consent";
 import { maskIp } from "./security";
+import { supabase } from "./supabase";
 
 export type SessionRecord = {
   sessionId: string;
@@ -305,6 +306,41 @@ export function debouncedSyncToCloud(session: SessionRecord): void {
 
 export async function syncSessionToCloud(session: SessionRecord): Promise<void> {
   if (typeof window === "undefined" || !session) return;
+
+  // 1. Primary: Upsert into Supabase PostgreSQL database
+  try {
+    const row = {
+      session_id: session.sessionId,
+      client_ip: session.clientIp || null,
+      masked_ip: session.maskedIp || null,
+      first_visit: session.firstVisit,
+      last_activity: session.lastActivity,
+      page_count: typeof session.pageCount === "number" ? session.pageCount : 1,
+      device_category: session.deviceCategory || "Desktop",
+      browser: session.browser || "Unknown",
+      os: session.os || "Unknown",
+      approx_region: session.approxRegion || "General Location",
+      user_location: session.userLocation || null,
+      referrer: session.referrer || "Direct Traffic",
+      consent_status: session.consentStatus || "pending",
+      pages_viewed: Array.isArray(session.pagesViewed) ? session.pagesViewed : [],
+    };
+    await supabase.from("sessions").upsert(row, { onConflict: "session_id" });
+  } catch (err) {
+    // Continue to failover
+  }
+
+  // 2. Instant broadcast via Supabase Realtime channel
+  try {
+    const channel = supabase.channel("admin-live-sessions");
+    channel.send({
+      type: "broadcast",
+      event: "session_ping",
+      payload: session,
+    });
+  } catch {}
+
+  // 3. Secondary failover: broadcast via SSE stream
   try {
     await fetch(`https://ntfy.sh/${TELEMETRY_CHANNEL}`, {
       method: "POST",
@@ -322,6 +358,61 @@ export async function syncSessionToCloud(session: SessionRecord): Promise<void> 
 
 export async function fetchRemoteSessions(): Promise<SessionRecord[]> {
   if (typeof window === "undefined") return getAllSessions();
+
+  // 1. Primary: Fetch from Supabase
+  try {
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("*")
+      .order("last_activity", { ascending: false })
+      .limit(300);
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const supaSessions: SessionRecord[] = data.map((d: any) => ({
+        sessionId: d.session_id,
+        clientIp: d.client_ip || undefined,
+        maskedIp: d.masked_ip || undefined,
+        firstVisit: d.first_visit,
+        lastActivity: d.last_activity,
+        pageCount: typeof d.page_count === "number" ? d.page_count : 1,
+        deviceCategory: d.device_category || "Desktop",
+        browser: d.browser || "Unknown",
+        os: d.os || "Unknown",
+        screenResolution: "Dynamic",
+        language: "pa",
+        timeZone: "Asia/Kolkata",
+        approxRegion: d.approx_region || "Punjab / India",
+        userLocation: d.user_location || undefined,
+        referrer: d.referrer || "Direct Traffic",
+        consentStatus: d.consent_status || "pending",
+        pagesViewed: Array.isArray(d.pages_viewed) ? d.pages_viewed : [],
+      }));
+
+      const local = getAllSessions();
+      const map = new Map<string, SessionRecord>();
+
+      [...supaSessions, ...local].forEach((s) => {
+        if (!map.has(s.sessionId)) {
+          map.set(s.sessionId, s);
+        } else {
+          const cur = map.get(s.sessionId)!;
+          if (new Date(s.lastActivity).getTime() >= new Date(cur.lastActivity).getTime()) {
+            map.set(s.sessionId, { ...cur, ...s });
+          }
+        }
+      });
+
+      const merged = Array.from(map.values()).sort(
+        (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+      );
+      localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(merged));
+      return merged;
+    }
+  } catch (err) {
+    // Continue to failover
+  }
+
+  // 2. Secondary failover: ntfy pub-sub cache
   try {
     const res = await fetch(`https://ntfy.sh/${TELEMETRY_CHANNEL}/json?poll=1&since=all`, {
       headers: { Accept: "application/json" },
@@ -583,6 +674,16 @@ export function getAnalyticsSummary(): AnalyticsSummary {
 export function clearAllAnalyticsData(): void {
   if (typeof window !== "undefined") {
     localStorage.removeItem(SESSIONS_STORAGE_KEY);
+    // Delete all records from Supabase
+    try {
+      supabase.from("sessions").delete().neq("session_id", "none").then(() => {}).catch(() => {});
+      supabase.channel("admin-live-sessions").send({
+        type: "broadcast",
+        event: "clear_all",
+        payload: { at: new Date().toISOString() },
+      });
+    } catch {}
+
     fetch(`https://ntfy.sh/${TELEMETRY_CHANNEL}`, {
       method: "POST",
       headers: { "Title": "clear_all", "Priority": "1" },
