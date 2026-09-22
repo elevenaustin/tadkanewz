@@ -43,7 +43,10 @@ export function CookieConsent() {
     // If the location prompt has not been answered yet, wait for user interaction with it.
     const isLocationPromptAnswered =
       typeof window !== "undefined" &&
-      !!localStorage.getItem("tadkanewz_local_news_prompt_v1");
+      !!(
+        localStorage.getItem("tadkanewz_onboarding_prompt_v2") ||
+        localStorage.getItem("tadkanewz_local_news_prompt_v1")
+      );
 
     if (current.status === "pending") {
       if (isLocationPromptAnswered) {
