@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useLocation,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -13,6 +14,8 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SiteHeader } from "@/components/news/site-header";
 import { SiteFooter } from "@/components/news/site-footer";
+import { CookieConsent } from "@/components/news/cookie-consent";
+import { recordPageView } from "@/lib/analytics";
 
 function NotFoundComponent() {
   return (
@@ -120,12 +123,23 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const location = useLocation();
+
+  useEffect(() => {
+    // Record privacy-consented page view
+    recordPageView(location.pathname);
+  }, [location.pathname]);
+
+  const isAdminRoute = location.pathname.startsWith("/admin");
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SiteHeader />
-      <main><Outlet /></main>
-      <SiteFooter />
+      {!isAdminRoute && <SiteHeader />}
+      <main>
+        <Outlet />
+      </main>
+      {!isAdminRoute && <SiteFooter />}
+      <CookieConsent />
     </QueryClientProvider>
   );
 }

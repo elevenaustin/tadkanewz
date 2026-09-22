@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as AdvertiseRouteImport } from './routes/advertise'
 import { Route as ContactRouteImport } from './routes/contact'
+import { Route as CookiePolicyRouteImport } from './routes/cookie-policy'
 import { Route as CookiesRouteImport } from './routes/cookies'
 import { Route as NewslinkRouteImport } from './routes/newslink'
 import { Route as PrivacyRouteImport } from './routes/privacy'
@@ -20,6 +21,8 @@ import { Route as SearchRouteImport } from './routes/search'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as WriteRouteImport } from './routes/write'
 import { Route as CategorySlugRouteImport } from './routes/$category.$slug'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AuthorSlugRouteImport } from './routes/author.$slug'
 import { Route as CategoryCategoryRouteImport } from './routes/category.$category'
 
@@ -41,6 +44,11 @@ const AdvertiseRoute = AdvertiseRouteImport.update({
 const ContactRoute = ContactRouteImport.update({
   id: '/contact',
   path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CookiePolicyRoute = CookiePolicyRouteImport.update({
+  id: '/cookie-policy',
+  path: '/cookie-policy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CookiesRoute = CookiesRouteImport.update({
@@ -78,6 +86,16 @@ const CategorySlugRoute = CategorySlugRouteImport.update({
   path: '/$category/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/admin/login',
+  path: '/admin/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthorSlugRoute = AuthorSlugRouteImport.update({
   id: '/author/$slug',
   path: '/author/$slug',
@@ -94,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/advertise': typeof AdvertiseRoute
   '/contact': typeof ContactRoute
+  '/cookie-policy': typeof CookiePolicyRoute
   '/cookies': typeof CookiesRoute
   '/newslink': typeof NewslinkRoute
   '/privacy': typeof PrivacyRoute
@@ -101,14 +120,17 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/write': typeof WriteRoute
   '/$category/$slug': typeof CategorySlugRoute
+  '/admin/login': typeof AdminLoginRoute
   '/author/$slug': typeof AuthorSlugRoute
   '/category/$category': typeof CategoryCategoryRoute
+  '/admin/': typeof AdminIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/advertise': typeof AdvertiseRoute
   '/contact': typeof ContactRoute
+  '/cookie-policy': typeof CookiePolicyRoute
   '/cookies': typeof CookiesRoute
   '/newslink': typeof NewslinkRoute
   '/privacy': typeof PrivacyRoute
@@ -116,8 +138,10 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/write': typeof WriteRoute
   '/$category/$slug': typeof CategorySlugRoute
+  '/admin/login': typeof AdminLoginRoute
   '/author/$slug': typeof AuthorSlugRoute
   '/category/$category': typeof CategoryCategoryRoute
+  '/admin': typeof AdminIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -125,6 +149,7 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/advertise': typeof AdvertiseRoute
   '/contact': typeof ContactRoute
+  '/cookie-policy': typeof CookiePolicyRoute
   '/cookies': typeof CookiesRoute
   '/newslink': typeof NewslinkRoute
   '/privacy': typeof PrivacyRoute
@@ -132,8 +157,10 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/write': typeof WriteRoute
   '/$category/$slug': typeof CategorySlugRoute
+  '/admin/login': typeof AdminLoginRoute
   '/author/$slug': typeof AuthorSlugRoute
   '/category/$category': typeof CategoryCategoryRoute
+  '/admin/': typeof AdminIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -142,6 +169,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/advertise'
     | '/contact'
+    | '/cookie-policy'
     | '/cookies'
     | '/newslink'
     | '/privacy'
@@ -149,14 +177,17 @@ export interface FileRouteTypes {
     | '/terms'
     | '/write'
     | '/$category/$slug'
+    | '/admin/login'
     | '/author/$slug'
     | '/category/$category'
+    | '/admin/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/about'
     | '/advertise'
     | '/contact'
+    | '/cookie-policy'
     | '/cookies'
     | '/newslink'
     | '/privacy'
@@ -164,14 +195,17 @@ export interface FileRouteTypes {
     | '/terms'
     | '/write'
     | '/$category/$slug'
+    | '/admin/login'
     | '/author/$slug'
     | '/category/$category'
+    | '/admin'
   id:
     | '__root__'
     | '/'
     | '/about'
     | '/advertise'
     | '/contact'
+    | '/cookie-policy'
     | '/cookies'
     | '/newslink'
     | '/privacy'
@@ -179,8 +213,10 @@ export interface FileRouteTypes {
     | '/terms'
     | '/write'
     | '/$category/$slug'
+    | '/admin/login'
     | '/author/$slug'
     | '/category/$category'
+    | '/admin/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -188,6 +224,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   AdvertiseRoute: typeof AdvertiseRoute
   ContactRoute: typeof ContactRoute
+  CookiePolicyRoute: typeof CookiePolicyRoute
   CookiesRoute: typeof CookiesRoute
   NewslinkRoute: typeof NewslinkRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -195,8 +232,10 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   WriteRoute: typeof WriteRoute
   CategorySlugRoute: typeof CategorySlugRoute
+  AdminLoginRoute: typeof AdminLoginRoute
   AuthorSlugRoute: typeof AuthorSlugRoute
   CategoryCategoryRoute: typeof CategoryCategoryRoute
+  AdminIndexRoute: typeof AdminIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -227,6 +266,13 @@ declare module '@tanstack/react-router' {
       path: '/contact'
       fullPath: '/contact'
       preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cookie-policy': {
+      id: '/cookie-policy'
+      path: '/cookie-policy'
+      fullPath: '/cookie-policy'
+      preLoaderRoute: typeof CookiePolicyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cookies': {
@@ -278,6 +324,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CategorySlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/login': {
+      id: '/admin/login'
+      path: '/admin/login'
+      fullPath: '/admin/login'
+      preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/author/$slug': {
       id: '/author/$slug'
       path: '/author/$slug'
@@ -300,6 +360,7 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   AdvertiseRoute: AdvertiseRoute,
   ContactRoute: ContactRoute,
+  CookiePolicyRoute: CookiePolicyRoute,
   CookiesRoute: CookiesRoute,
   NewslinkRoute: NewslinkRoute,
   PrivacyRoute: PrivacyRoute,
@@ -307,8 +368,10 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   WriteRoute: WriteRoute,
   CategorySlugRoute: CategorySlugRoute,
+  AdminLoginRoute: AdminLoginRoute,
   AuthorSlugRoute: AuthorSlugRoute,
   CategoryCategoryRoute: CategoryCategoryRoute,
+  AdminIndexRoute: AdminIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,1 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="8" fill="#d71920"/><path fill="#fff" d="M9 13h46v11H38v29H26V24H9z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="tn-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#DC2626" />
+      <stop offset="100%" stop-color="#991B1B" />
+    </linearGradient>
+    <linearGradient id="tn-flame" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FBBF24" />
+      <stop offset="100%" stop-color="#F59E0B" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Background Rounded Shield / Square -->
+  <rect width="512" height="512" rx="112" fill="url(#tn-bg)" />
+  
+  <!-- Subtle Border Ring -->
+  <rect x="12" y="12" width="488" height="488" rx="100" fill="none" stroke="#FFFFFF" stroke-opacity="0.2" stroke-width="8"/>
+
+  <!-- Tadka Flame Accent on Top Right -->
+  <path d="M370 110 C390 140 400 170 380 200 C360 180 355 160 360 140 C340 165 330 200 350 230 C320 200 325 155 370 110 Z" fill="url(#tn-flame)" />
+
+  <!-- Monogram "TN" with Punchy Typography -->
+  <g filter="url(#shadow)">
+    <!-- Letter T -->
+    <path d="M110 160 H290 V220 H230 V390 H170 V220 H110 Z" fill="#FFFFFF" />
+    <!-- Letter N -->
+    <path d="M260 210 H315 L375 320 V210 H425 V390 H370 L310 280 V390 H260 Z" fill="#FFFFFF" />
+  </g>
+
+  <!-- Small Tadka Yellow Dot Badge -->
+  <circle cx="430" cy="170" r="22" fill="#FBBF24" />
+</svg>
