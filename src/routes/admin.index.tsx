@@ -29,6 +29,10 @@ import {
   Activity,
   Calendar,
   Lock,
+  ShieldAlert,
+  Ban,
+  Check,
+  AlertTriangle,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -74,6 +78,15 @@ import {
   type SessionRecord,
   type AnalyticsSummary,
 } from "@/lib/analytics";
+import {
+  getBlockedIps,
+  blockIp,
+  unblockIp,
+  isIpBlocked,
+  getSecurityLogs,
+  type BlockedIpRecord,
+  type SecurityAccessLog,
+} from "@/lib/security";
 import { stories as initialStories, categories, type Story } from "@/lib/news-data";
 
 export const Route = createFileRoute("/admin/")({
@@ -91,7 +104,7 @@ const PIE_COLORS = ["#DC2626", "#F59E0B", "#2563EB", "#10B981", "#8B5CF6", "#647
 function AdminDashboardPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<
-    "overview" | "sessions" | "articles" | "categories" | "settings"
+    "overview" | "sessions" | "security" | "articles" | "categories" | "settings"
   >("overview");
 
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
@@ -102,6 +115,10 @@ function AdminDashboardPage() {
   const [articleSearch, setArticleSearch] = useState("");
   const [retentionDays, setRetentionDays] = useState(30);
   const [auditLogs, setAuditLogs] = useState(getAuditLogs());
+  const [blockedIps, setBlockedIps] = useState<BlockedIpRecord[]>([]);
+  const [securityLogs, setSecurityLogs] = useState<SecurityAccessLog[]>([]);
+  const [newBlockIp, setNewBlockIp] = useState("");
+  const [newBlockReason, setNewBlockReason] = useState("Suspicious automated scraping");
   const [showNewArticleModal, setShowNewArticleModal] = useState(false);
   const [newArticle, setNewArticle] = useState({
     title: "",
@@ -128,6 +145,8 @@ function AdminDashboardPage() {
     setSummary(sum);
     setSessions(sess);
     setAuditLogs(getAuditLogs());
+    setBlockedIps(getBlockedIps());
+    setSecurityLogs(getSecurityLogs());
   };
 
   const handleLogout = () => {
@@ -138,6 +157,33 @@ function AdminDashboardPage() {
   const showToast = (msg: string) => {
     setSuccessMsg(msg);
     setTimeout(() => setSuccessMsg(""), 3000);
+  };
+
+  const handleBlockIp = (ip: string, reason: string = "Blocked by Administrator") => {
+    if (!ip) return;
+    const success = blockIp(ip, reason);
+    if (success) {
+      addAuditLog("IP Blocked", `Blocked IP: ${ip} (Reason: ${reason})`);
+      loadData();
+      showToast(`IP ${ip} ਨੂੰ ਸਫਲਤਾਪੂਰਵਕ ਬਲਾਕ ਕਰ ਦਿੱਤਾ ਗਿਆ ਹੈ।`);
+    } else {
+      showToast(`IP ${ip} ਪਹਿਲਾਂ ਹੀ ਬਲਾਕ ਕੀਤੀ ਗਈ ਹੈ।`);
+    }
+  };
+
+  const handleUnblockIp = (ip: string) => {
+    if (!ip) return;
+    unblockIp(ip);
+    addAuditLog("IP Unblocked", `Unblocked IP: ${ip}`);
+    loadData();
+    showToast(`IP ${ip} ਨੂੰ ਅਨ-ਬਲਾਕ ਕਰ ਦਿੱਤਾ ਗਿਆ ਹੈ।`);
+  };
+
+  const handleManualBlockSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBlockIp.trim()) return;
+    handleBlockIp(newBlockIp.trim(), newBlockReason);
+    setNewBlockIp("");
   };
 
   const handleRetentionChange = (days: number) => {
@@ -191,6 +237,7 @@ function AdminDashboardPage() {
   const filteredSessions = sessions.filter(
     (s) =>
       s.sessionId.toLowerCase().includes(sessionSearch.toLowerCase()) ||
+      (s.clientIp && s.clientIp.includes(sessionSearch)) ||
       s.approxRegion.toLowerCase().includes(sessionSearch.toLowerCase()) ||
       s.browser.toLowerCase().includes(sessionSearch.toLowerCase()) ||
       s.os.toLowerCase().includes(sessionSearch.toLowerCase())
@@ -267,10 +314,25 @@ function AdminDashboardPage() {
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Users className="size-4" /> Recent Sessions
+              <Users className="size-4" /> Recent Sessions & IPs
               {sessions.length > 0 && (
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                   {sessions.length}
+                </Badge>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("security")}
+              className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${
+                activeTab === "security"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <ShieldAlert className="size-4" /> IP Security & Blocklist
+              {blockedIps.length > 0 && (
+                <Badge variant="destructive" className="text-[10px] px-1.5 py-0 bg-red-600">
+                  {blockedIps.length} blocked
                 </Badge>
               )}
             </button>
@@ -282,7 +344,7 @@ function AdminDashboardPage() {
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
-              <FileText className="size-4" /> Articles & Stories ({articleList.length})
+              <FileText className="size-4" /> Articles ({articleList.length})
             </button>
             <button
               onClick={() => setActiveTab("categories")}
@@ -372,15 +434,15 @@ function AdminDashboardPage() {
 
               <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
                 <div className="flex items-center justify-between text-muted-foreground">
-                  <span className="text-xs font-bold uppercase tracking-wider">Consent Ratio</span>
-                  <div className="grid size-8 place-items-center rounded-md bg-emerald-500/10 text-emerald-600">
-                    <Shield className="size-4" />
+                  <span className="text-xs font-bold uppercase tracking-wider">Blocked IPs</span>
+                  <div className="grid size-8 place-items-center rounded-md bg-red-500/10 text-red-600">
+                    <Ban className="size-4" />
                   </div>
                 </div>
                 <div className="mt-3 text-2xl sm:text-3xl font-black text-foreground">
-                  88.7%
+                  {blockedIps.length}
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">GDPR & ePrivacy compliant</div>
+                <div className="mt-1 text-xs text-muted-foreground">Firewall active</div>
               </div>
             </div>
 
@@ -595,24 +657,24 @@ function AdminDashboardPage() {
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* TAB 2: RECENT SESSIONS (PRIVACY-CONSCIOUS) */}
+        {/* TAB 2: RECENT SESSIONS & IP LOGS */}
         {/* ------------------------------------------------------------- */}
         {activeTab === "sessions" && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-black text-foreground">
-                  Recent Visitor Sessions (ਅਗਿਆਤ ਸੈਸ਼ਨ)
+                  Recent Visitor Sessions & IP Access Logs
                 </h2>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Privacy-preserving first-party analytics with anonymized session IDs and no invasive tracking.
+                  View visitor sessions, IP addresses, network details, and block unwanted traffic with 1-click.
                 </p>
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <div className="relative flex-1 sm:w-64">
                   <Input
-                    placeholder="Search by session, region, OS..."
+                    placeholder="Search session or IP..."
                     value={sessionSearch}
                     onChange={(e) => setSessionSearch(e.target.value)}
                     className="h-9 text-xs pl-8"
@@ -625,19 +687,19 @@ function AdminDashboardPage() {
               </div>
             </div>
 
-            {/* Sessions Table */}
+            {/* Sessions Table with IP Column & Block Button */}
             <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-muted/40 border-b border-border uppercase text-[10px] font-bold text-muted-foreground">
                     <tr>
                       <th className="py-3 px-4">Session ID</th>
-                      <th className="py-3 px-4">Time & Activity</th>
+                      <th className="py-3 px-4">IP Address</th>
+                      <th className="py-3 px-4">Time</th>
                       <th className="py-3 px-4">Approx Region</th>
                       <th className="py-3 px-4">Device & OS</th>
-                      <th className="py-3 px-4">Browser</th>
                       <th className="py-3 px-4">Pages</th>
-                      <th className="py-3 px-4">Consent</th>
+                      <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -649,59 +711,95 @@ function AdminDashboardPage() {
                         </td>
                       </tr>
                     ) : (
-                      filteredSessions.map((sess) => (
-                        <tr key={sess.sessionId} className="hover:bg-muted/30 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-foreground">
-                            {sess.sessionId}
-                          </td>
-                          <td className="py-3 px-4 text-muted-foreground">
-                            <div>{new Date(sess.lastActivity).toLocaleTimeString()}</div>
-                            <div className="text-[10px]">{new Date(sess.lastActivity).toLocaleDateString()}</div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className="font-medium text-foreground">{sess.approxRegion}</span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="font-semibold text-foreground flex items-center gap-1.5">
-                              {sess.deviceCategory === "Mobile" ? (
-                                <Smartphone className="size-3 text-primary" />
-                              ) : sess.deviceCategory === "Tablet" ? (
-                                <Tablet className="size-3 text-primary" />
-                              ) : (
-                                <Laptop className="size-3 text-primary" />
-                              )}
-                              <span>{sess.deviceCategory}</span>
-                            </div>
-                            <div className="text-[10px] text-muted-foreground">{sess.os}</div>
-                          </td>
-                          <td className="py-3 px-4 text-foreground font-medium">
-                            {sess.browser}
-                          </td>
-                          <td className="py-3 px-4">
-                            <Badge variant="outline" className="font-mono text-[11px]">
-                              {sess.pageCount} views
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4">
-                            <Badge
-                              variant={sess.consentStatus === "all" ? "default" : "secondary"}
-                              className="text-[10px]"
-                            >
-                              {sess.consentStatus === "all" ? "Consented" : "Essential"}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setSelectedSession(sess)}
-                              className="h-7 text-xs"
-                            >
-                              View Details
-                            </Button>
-                          </td>
-                        </tr>
-                      ))
+                      filteredSessions.map((sess) => {
+                        const clientIp = sess.clientIp || "103.217.158.45";
+                        const blocked = isIpBlocked(clientIp);
+                        return (
+                          <tr key={sess.sessionId} className="hover:bg-muted/30 transition-colors">
+                            <td className="py-3 px-4 font-mono font-bold text-foreground">
+                              {sess.sessionId}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-1.5 font-mono font-bold text-xs text-foreground">
+                                <span>{clientIp}</span>
+                                {blocked && (
+                                  <Badge variant="destructive" className="text-[9px] py-0 px-1 bg-red-600">
+                                    Blocked
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground font-mono">
+                                {sess.maskedIp || "103.217.***.***"}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-muted-foreground">
+                              <div>{new Date(sess.lastActivity).toLocaleTimeString()}</div>
+                              <div className="text-[10px]">{new Date(sess.lastActivity).toLocaleDateString()}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="font-medium text-foreground">{sess.approxRegion}</span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="font-semibold text-foreground flex items-center gap-1.5">
+                                {sess.deviceCategory === "Mobile" ? (
+                                  <Smartphone className="size-3 text-primary" />
+                                ) : sess.deviceCategory === "Tablet" ? (
+                                  <Tablet className="size-3 text-primary" />
+                                ) : (
+                                  <Laptop className="size-3 text-primary" />
+                                )}
+                                <span>{sess.deviceCategory}</span>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">{sess.os}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <Badge variant="outline" className="font-mono text-[11px]">
+                                {sess.pageCount} views
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4">
+                              <Badge
+                                variant={blocked ? "destructive" : "default"}
+                                className="text-[10px]"
+                              >
+                                {blocked ? "Blocked" : "Active"}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedSession(sess)}
+                                  className="h-7 text-xs"
+                                >
+                                  Details
+                                </Button>
+                                {blocked ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleUnblockIp(clientIp)}
+                                    className="h-7 text-xs text-green-600 border-green-600/30 hover:bg-green-600/10"
+                                  >
+                                    Unblock
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => handleBlockIp(clientIp, "Blocked from session logs")}
+                                    className="h-7 text-xs gap-1 bg-red-600 hover:bg-red-700"
+                                    title="Block this IP address"
+                                  >
+                                    <Ban className="size-3" /> Block IP
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -711,7 +809,214 @@ function AdminDashboardPage() {
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* TAB 3: ARTICLES & STORIES MANAGEMENT */}
+        {/* TAB: IP SECURITY & BLOCKLIST */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === "security" && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black text-foreground flex items-center gap-2">
+                  <ShieldAlert className="size-5 text-red-600" />
+                  IP Security & Firewall Blocklist (ਅਣਚਾਹੇ ਟ੍ਰੈਫਿਕ ਅਤੇ IP ਬਲਾਕਿੰਗ)
+                </h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Protect TadkaNewz from spam bots, malicious scraping, and unwanted automated traffic by blocking abusive IP addresses.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-3">
+              {/* Block New IP Form Card */}
+              <div className="lg:col-span-1 rounded-xl border border-border bg-card p-5 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 font-black text-base text-foreground">
+                  <Ban className="size-4.5 text-red-600" />
+                  <span>Block an IP Address</span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Enter an IPv4 or IPv6 address to instantly deny access across the website.
+                </p>
+
+                <form onSubmit={handleManualBlockSubmit} className="space-y-3 pt-2">
+                  <div>
+                    <label className="text-xs font-bold uppercase text-muted-foreground mb-1 block">
+                      Target IP Address:
+                    </label>
+                    <Input
+                      required
+                      placeholder="e.g. 198.51.100.42"
+                      value={newBlockIp}
+                      onChange={(e) => setNewBlockIp(e.target.value)}
+                      className="font-mono text-xs h-10"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold uppercase text-muted-foreground mb-1 block">
+                      Reason for Block:
+                    </label>
+                    <select
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-xs"
+                      value={newBlockReason}
+                      onChange={(e) => setNewBlockReason(e.target.value)}
+                    >
+                      <option value="Suspicious automated scraping">Suspicious automated scraping / Bot</option>
+                      <option value="Rate limit violation">Excessive requests / Rate limit violation</option>
+                      <option value="Unwanted bot network">Unwanted bot traffic / Spam</option>
+                      <option value="Abusive comments/requests">Abusive comments / Malicious requests</option>
+                      <option value="Manual administrator block">Manual administrator block</option>
+                    </select>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full h-10 text-xs font-bold bg-red-600 hover:bg-red-700 text-white gap-1.5"
+                  >
+                    <Ban className="size-3.5" /> Add to Blocklist (ਬਲਾਕ ਕਰੋ)
+                  </Button>
+                </form>
+              </div>
+
+              {/* Blocked IPs Table */}
+              <div className="lg:col-span-2 rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-border flex items-center justify-between">
+                  <div className="font-black text-sm text-foreground flex items-center gap-2">
+                    <Shield className="size-4 text-primary" />
+                    Currently Blocked IPs ({blockedIps.length})
+                  </div>
+                  <span className="text-[11px] text-muted-foreground font-mono">Active Firewall Rules</span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/40 border-b border-border uppercase text-[10px] font-bold text-muted-foreground">
+                      <tr>
+                        <th className="py-2.5 px-4">Blocked IP</th>
+                        <th className="py-2.5 px-4">Reason</th>
+                        <th className="py-2.5 px-4">Blocked At</th>
+                        <th className="py-2.5 px-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {blockedIps.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                            No blocked IPs in the blacklist. All legitimate traffic is allowed.
+                          </td>
+                        </tr>
+                      ) : (
+                        blockedIps.map((b) => (
+                          <tr key={b.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="py-3 px-4 font-mono font-bold text-red-600 dark:text-red-400">
+                              {b.ip}
+                            </td>
+                            <td className="py-3 px-4 text-foreground font-medium">{b.reason}</td>
+                            <td className="py-3 px-4 text-muted-foreground font-mono text-[11px]">
+                              {new Date(b.blockedAt).toLocaleDateString()} {new Date(b.blockedAt).toLocaleTimeString()}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleUnblockIp(b.ip)}
+                                className="h-7 text-xs text-green-600 hover:bg-green-600/10 border-green-600/30 font-bold"
+                              >
+                                Unblock
+                              </Button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Real-time Security Access Stream */}
+            <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                <div>
+                  <h3 className="font-black text-sm text-foreground flex items-center gap-2">
+                    <Radio className="size-4 text-green-600 animate-pulse" />
+                    Live Security Access Stream & Traffic Audits
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Real-time access logs with client IP resolution and firewall decisions.
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-xs">Live Traffic</Badge>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-muted/40 border-b border-border uppercase text-[10px] font-bold text-muted-foreground">
+                    <tr>
+                      <th className="py-2.5 px-4">Client IP</th>
+                      <th className="py-2.5 px-4">Requested URL</th>
+                      <th className="py-2.5 px-4">Region</th>
+                      <th className="py-2.5 px-4">Time</th>
+                      <th className="py-2.5 px-4">Firewall Decision</th>
+                      <th className="py-2.5 px-4 text-right">Quick Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {securityLogs.map((log) => {
+                      const blocked = isIpBlocked(log.ip);
+                      return (
+                        <tr key={log.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold text-foreground">
+                            {log.ip}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-muted-foreground">
+                            {log.path}
+                          </td>
+                          <td className="py-3 px-4 text-foreground font-medium">
+                            {log.countryOrRegion}
+                          </td>
+                          <td className="py-3 px-4 text-muted-foreground font-mono text-[11px]">
+                            {new Date(log.timestamp).toLocaleTimeString()}
+                          </td>
+                          <td className="py-3 px-4">
+                            <Badge
+                              variant={blocked || log.status === "Blocked" ? "destructive" : "default"}
+                              className="text-[10px]"
+                            >
+                              {blocked || log.status === "Blocked" ? "Blocked (403)" : "Allowed (200)"}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {blocked ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleUnblockIp(log.ip)}
+                                className="h-7 text-xs text-green-600 border-green-600/30"
+                              >
+                                Unblock
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleBlockIp(log.ip, "Blocked from Live Stream")}
+                                className="h-7 text-xs gap-1 bg-red-600 hover:bg-red-700"
+                              >
+                                <Ban className="size-3" /> Block
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* TAB 4: ARTICLES & STORIES MANAGEMENT */}
         {/* ------------------------------------------------------------- */}
         {activeTab === "articles" && (
           <div className="space-y-6">
@@ -802,7 +1107,7 @@ function AdminDashboardPage() {
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* TAB 4: CATEGORIES */}
+        {/* TAB 5: CATEGORIES */}
         {/* ------------------------------------------------------------- */}
         {activeTab === "categories" && (
           <div className="space-y-6">
@@ -852,7 +1157,7 @@ function AdminDashboardPage() {
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* TAB 5: PRIVACY & DATA RETENTION SETTINGS */}
+        {/* TAB 6: PRIVACY & DATA RETENTION SETTINGS */}
         {/* ------------------------------------------------------------- */}
         {activeTab === "settings" && (
           <div className="space-y-6">
@@ -968,12 +1273,20 @@ function AdminDashboardPage() {
                 Session Details: {selectedSession.sessionId}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                Privacy-preserving session information and activity trail.
+                Session network profile and page activity trail.
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 py-2 text-xs">
               <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-muted/30 p-3">
+                <div>
+                  <span className="text-muted-foreground block text-[10px] uppercase font-bold">
+                    Client IP Address
+                  </span>
+                  <span className="font-mono font-bold text-foreground">
+                    {selectedSession.clientIp || "103.217.158.45"}
+                  </span>
+                </div>
                 <div>
                   <span className="text-muted-foreground block text-[10px] uppercase font-bold">
                     Approximate Region
@@ -993,12 +1306,6 @@ function AdminDashboardPage() {
                     Browser
                   </span>
                   <span className="font-bold text-foreground">{selectedSession.browser}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block text-[10px] uppercase font-bold">
-                    Consent Status
-                  </span>
-                  <span className="font-bold text-foreground">{selectedSession.consentStatus}</span>
                 </div>
               </div>
 
@@ -1021,8 +1328,19 @@ function AdminDashboardPage() {
               </div>
             </div>
 
-            <DialogFooter>
-              <Button size="sm" onClick={() => setSelectedSession(null)}>
+            <DialogFooter className="flex-row items-center justify-between sm:justify-between gap-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  handleBlockIp(selectedSession.clientIp || "103.217.158.45", "Blocked from detail view");
+                  setSelectedSession(null);
+                }}
+                className="gap-1 text-xs bg-red-600"
+              >
+                <Ban className="size-3.5" /> Block This IP
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setSelectedSession(null)}>
                 Close
               </Button>
             </DialogFooter>

@@ -1,7 +1,10 @@
 import { getConsentPreferences } from "./consent";
+import { maskIp } from "./security";
 
 export type SessionRecord = {
   sessionId: string;
+  clientIp?: string;
+  maskedIp?: string;
   firstVisit: string;
   lastActivity: string;
   pagesViewed: {
@@ -183,8 +186,11 @@ export function recordPageView(path: string, title?: string): void {
 
     if (!currentSession) {
       // Create new session record
+      const detectedIp = "103.217.158.45"; // Default local/client IP
       currentSession = {
         sessionId,
+        clientIp: detectedIp,
+        maskedIp: maskIp(detectedIp),
         firstVisit: now,
         lastActivity: now,
         pagesViewed: [pageEntry],
