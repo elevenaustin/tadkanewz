@@ -163,15 +163,129 @@ function getCurrentSessionId(): string {
   return sessId;
 }
 
-// Record a page view event (respecting user consent)
+let cachedClientIp: string | null = null;
+
+export async function getClientPublicIp(): Promise<string> {
+  if (cachedClientIp) return cachedClientIp;
+  if (typeof window !== "undefined") {
+    const saved = sessionStorage.getItem("tadkanewz_cached_client_ip");
+    if (saved && saved !== "127.0.0.1") {
+      cachedClientIp = saved;
+      return saved;
+    }
+
+    // Provider 1: ipwho.is (fast, HTTPS, provides real IP + region)
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch("https://ipwho.is/", {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.ip && data.success !== false) {
+          cachedClientIp = data.ip;
+          sessionStorage.setItem("tadkanewz_cached_client_ip", data.ip);
+          const geoHint = [data.city, data.region, data.country].filter(Boolean).join(", ");
+          updateSessionIp(data.ip, geoHint || undefined);
+          return data.ip;
+        }
+      }
+    } catch {
+      // Continue to next provider
+    }
+
+    // Provider 2: api64.ipify.org (IPv4/IPv6)
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch("https://api64.ipify.org?format=json", {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = (await res.json()) as { ip?: string };
+        if (data?.ip) {
+          cachedClientIp = data.ip;
+          sessionStorage.setItem("tadkanewz_cached_client_ip", data.ip);
+          updateSessionIp(data.ip);
+          return data.ip;
+        }
+      }
+    } catch {
+      // Continue to next provider
+    }
+
+    // Provider 3: api.ipify.org (IPv4 fallback)
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch("https://api.ipify.org?format=json", {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = (await res.json()) as { ip?: string };
+        if (data?.ip) {
+          cachedClientIp = data.ip;
+          sessionStorage.setItem("tadkanewz_cached_client_ip", data.ip);
+          updateSessionIp(data.ip);
+          return data.ip;
+        }
+      }
+    } catch {
+      // Continue
+    }
+
+    // Provider 4: icanhazip.com fallback
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch("https://icanhazip.com", {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const textIp = (await res.text()).trim();
+        if (textIp && !textIp.includes("<")) {
+          cachedClientIp = textIp;
+          sessionStorage.setItem("tadkanewz_cached_client_ip", textIp);
+          updateSessionIp(textIp);
+          return textIp;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  }
+  return "127.0.0.1";
+}
+
+export function updateSessionIp(ip: string, approxRegion?: string): void {
+  if (typeof window === "undefined" || !ip) return;
+  try {
+    const sessionId = getCurrentSessionId();
+    const sessions = getAllSessions();
+    const current = sessions.find((s) => s.sessionId === sessionId);
+    if (current) {
+      current.clientIp = ip;
+      current.maskedIp = maskIp(ip);
+      if (approxRegion && (!current.userLocation || !current.userLocation.label)) {
+        current.approxRegion = approxRegion;
+      }
+      localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
+    }
+  } catch (e) {
+    console.error("Failed to update session IP:", e);
+  }
+}
+
+// Record a page view event (respecting user consent for granular tracking)
 export function recordPageView(path: string, title?: string): void {
   if (typeof window === "undefined") return;
 
   const consent = getConsentPreferences();
-  // DO NOT record analytics if visitor hasn't consented or explicitly rejected
-  if (!consent.analytics) {
-    return;
-  }
 
   try {
     const sessionId = getCurrentSessionId();
@@ -189,13 +303,18 @@ export function recordPageView(path: string, title?: string): void {
       timestamp: now,
     };
 
+    // Attempt to read cached IP or trigger dynamic IP fetch
+    const currentCachedIp =
+      cachedClientIp ||
+      sessionStorage.getItem("tadkanewz_cached_client_ip") ||
+      "";
+
     if (!currentSession) {
       // Create new session record
-      const detectedIp = "103.217.158.45"; // Default local/client IP
       currentSession = {
         sessionId,
-        clientIp: detectedIp,
-        maskedIp: maskIp(detectedIp),
+        clientIp: currentCachedIp || undefined,
+        maskedIp: currentCachedIp ? maskIp(currentCachedIp) : undefined,
         firstVisit: now,
         lastActivity: now,
         pagesViewed: [pageEntry],
@@ -214,14 +333,27 @@ export function recordPageView(path: string, title?: string): void {
     } else {
       // Update existing session
       currentSession.lastActivity = now;
-      currentSession.pagesViewed.push(pageEntry);
-      currentSession.pageCount = currentSession.pagesViewed.length;
+      if (consent.analytics) {
+        currentSession.pagesViewed.push(pageEntry);
+      }
+      currentSession.pageCount = currentSession.pagesViewed.length || 1;
       currentSession.consentStatus = consent.status;
+      if (currentCachedIp && (!currentSession.clientIp || currentSession.clientIp === "127.0.0.1")) {
+        currentSession.clientIp = currentCachedIp;
+        currentSession.maskedIp = maskIp(currentCachedIp);
+      }
     }
 
     // Cap total sessions stored to 500 to keep localStorage optimal
     const boundedSessions = sessions.slice(0, 500);
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(boundedSessions));
+
+    // Asynchronously resolve real public IP in background
+    getClientPublicIp().then((realIp) => {
+      if (realIp && realIp !== "127.0.0.1") {
+        updateSessionIp(realIp);
+      }
+    });
   } catch (e) {
     console.error("Analytics record error:", e);
   }

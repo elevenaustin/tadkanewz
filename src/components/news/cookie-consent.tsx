@@ -36,11 +36,44 @@ export function CookieConsent() {
   useEffect(() => {
     setMounted(true);
     const current = getConsentPreferences();
-    if (current.status === "pending") {
-      setShowBanner(true);
-    }
     setAnalyticsConsent(current.analytics);
     setFunctionalConsent(current.functional);
+
+    // Location prompt should appear FIRST.
+    // If the location prompt has not been answered yet, wait for user interaction with it.
+    const isLocationPromptAnswered =
+      typeof window !== "undefined" &&
+      !!localStorage.getItem("tadkanewz_local_news_prompt_v1");
+
+    if (current.status === "pending") {
+      if (isLocationPromptAnswered) {
+        setShowBanner(true);
+      } else {
+        // Wait for location prompt to complete first
+        const handleLocationCompleted = () => {
+          setTimeout(() => {
+            const prefs = getConsentPreferences();
+            if (prefs.status === "pending") {
+              setShowBanner(true);
+            }
+          }, 350);
+        };
+        window.addEventListener("tadkanewz_local_prompt_completed", handleLocationCompleted);
+
+        // Fallback: If no interaction after 15 seconds, show cookie banner
+        const fallbackTimer = setTimeout(() => {
+          const prefs = getConsentPreferences();
+          if (prefs.status === "pending") {
+            setShowBanner(true);
+          }
+        }, 15000);
+
+        return () => {
+          window.removeEventListener("tadkanewz_local_prompt_completed", handleLocationCompleted);
+          clearTimeout(fallbackTimer);
+        };
+      }
+    }
 
     const handleOpenSettings = () => {
       const prefs = getConsentPreferences();

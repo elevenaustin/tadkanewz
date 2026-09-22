@@ -154,15 +154,16 @@ export function logSecurityAccess(
 
 function generateInitialSecurityLogs(): SecurityAccessLog[] {
   const now = Date.now();
+  const cached = typeof window !== "undefined" ? sessionStorage.getItem("tadkanewz_cached_client_ip") : null;
   return [
     {
       id: "sec_1",
-      ip: "103.217.158.45",
-      maskedIp: "103.217.***.***",
+      ip: cached || "49.36.12.80",
+      maskedIp: maskIp(cached || "49.36.12.80"),
       path: "/newslink",
       timestamp: new Date(now - 2 * 60 * 1000).toISOString(),
       status: "Allowed",
-      countryOrRegion: "Ludhiana, Punjab",
+      countryOrRegion: "Punjab, India",
     },
     {
       id: "sec_2",

@@ -46,19 +46,26 @@ export function LocalNewsPrompt() {
   const [showManualDropdown, setShowManualDropdown] = useState(false);
 
   useEffect(() => {
-    // Only show if not dismissed and not already chosen
+    // Show location prompt first on arrival if not previously answered
     const dismissed = localStorage.getItem(PROMPT_DISMISSED_KEY);
     if (!dismissed) {
       const timer = setTimeout(() => {
         setShow(true);
-      }, 2500); // 2.5s delay after page loads
+      }, 500); // Trigger prompt first
       return () => clearTimeout(timer);
     }
   }, []);
 
+  const notifyComplete = () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("tadkanewz_local_prompt_completed"));
+    }
+  };
+
   const handleDismiss = () => {
     localStorage.setItem(PROMPT_DISMISSED_KEY, "dismissed");
     setShow(false);
+    notifyComplete();
   };
 
   const handleManualSelect = (district: string) => {
@@ -68,7 +75,8 @@ export function LocalNewsPrompt() {
     setStatusMsg(`ਤੁਹਾਡਾ ਇਲਾਕਾ: ${district} ਸੈੱਟ ਕੀਤਾ ਗਿਆ ਹੈ!`);
     setTimeout(() => {
       setShow(false);
-    }, 2000);
+      notifyComplete();
+    }, 1200);
   };
 
   const handleEnableGps = () => {
@@ -106,7 +114,8 @@ export function LocalNewsPrompt() {
 
         setTimeout(() => {
           setShow(false);
-        }, 2200);
+          notifyComplete();
+        }, 1200);
       },
       (error) => {
         setLoading(false);

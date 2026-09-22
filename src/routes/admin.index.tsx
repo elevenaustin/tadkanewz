@@ -712,8 +712,9 @@ function AdminDashboardPage() {
                       </tr>
                     ) : (
                       filteredSessions.map((sess) => {
-                        const clientIp = sess.clientIp || "103.217.158.45";
-                        const blocked = isIpBlocked(clientIp);
+                        const clientIp = sess.clientIp || "Resolving IP...";
+                        const isResolved = sess.clientIp && sess.clientIp !== "127.0.0.1";
+                        const blocked = sess.clientIp ? isIpBlocked(sess.clientIp) : false;
                         return (
                           <tr key={sess.sessionId} className="hover:bg-muted/30 transition-colors">
                             <td className="py-3 px-4 font-mono font-bold text-foreground">
@@ -728,9 +729,11 @@ function AdminDashboardPage() {
                                   </Badge>
                                 )}
                               </div>
-                              <div className="text-[10px] text-muted-foreground font-mono">
-                                {sess.maskedIp || "103.217.***.***"}
-                              </div>
+                              {sess.maskedIp && (
+                                <div className="text-[10px] text-muted-foreground font-mono">
+                                  {sess.maskedIp}
+                                </div>
+                              )}
                             </td>
                             <td className="py-3 px-4 text-muted-foreground">
                               <div>{new Date(sess.lastActivity).toLocaleTimeString()}</div>
@@ -1340,17 +1343,19 @@ function AdminDashboardPage() {
             </div>
 
             <DialogFooter className="flex-row items-center justify-between sm:justify-between gap-2">
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  handleBlockIp(selectedSession.clientIp || "103.217.158.45", "Blocked from detail view");
-                  setSelectedSession(null);
-                }}
-                className="gap-1 text-xs bg-red-600"
-              >
-                <Ban className="size-3.5" /> Block This IP
-              </Button>
+              {selectedSession.clientIp && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    handleBlockIp(selectedSession.clientIp!, "Blocked from detail view");
+                    setSelectedSession(null);
+                  }}
+                  className="gap-1 text-xs bg-red-600"
+                >
+                  <Ban className="size-3.5" /> Block IP ({selectedSession.clientIp})
+                </Button>
+              )}
               <Button size="sm" variant="outline" onClick={() => setSelectedSession(null)}>
                 Close
               </Button>
