@@ -1307,6 +1307,17 @@ function AdminDashboardPage() {
                   </span>
                   <span className="font-bold text-foreground">{selectedSession.browser}</span>
                 </div>
+                {selectedSession.userLocation && (
+                  <div className="col-span-2 rounded bg-green-500/10 border border-green-500/20 p-2 text-green-700 dark:text-green-400">
+                    <span className="block text-[10px] uppercase font-bold">
+                      📍 Consented Location for Feeds:
+                    </span>
+                    <span className="font-bold">
+                      {selectedSession.userLocation.label}
+                      {selectedSession.userLocation.coords ? ` (${selectedSession.userLocation.coords})` : ""}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div>

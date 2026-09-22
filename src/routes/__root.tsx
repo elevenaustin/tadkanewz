@@ -121,6 +121,8 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+import { LocalNewsPrompt } from "@/components/news/local-news-prompt";
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const location = useLocation();
@@ -140,6 +142,7 @@ function RootComponent() {
       </main>
       {!isAdminRoute && <SiteFooter />}
       <CookieConsent />
+      {!isAdminRoute && <LocalNewsPrompt />}
     </QueryClientProvider>
   );
 }

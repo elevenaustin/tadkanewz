@@ -20,6 +20,11 @@ export type SessionRecord = {
   language: string;
   timeZone: string;
   approxRegion: string;
+  userLocation?: {
+    label: string;
+    coords?: string;
+    consentedAt: string;
+  };
   referrer: string;
   consentStatus: "all" | "essential_only" | "custom" | "pending";
 };
@@ -382,3 +387,25 @@ export function clearAllAnalyticsData(): void {
     localStorage.removeItem(SESSIONS_STORAGE_KEY);
   }
 }
+
+// Update current active session with consented user location for localized news feeds
+export function updateSessionLocation(locationLabel: string, coords?: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const sessionId = getCurrentSessionId();
+    const sessions = getAllSessions();
+    const current = sessions.find((s) => s.sessionId === sessionId);
+    if (current) {
+      current.userLocation = {
+        label: locationLabel,
+        coords,
+        consentedAt: new Date().toISOString(),
+      };
+      current.approxRegion = `${locationLabel} (Consented)`;
+      localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
+    }
+  } catch (e) {
+    console.error("Failed to update session location:", e);
+  }
+}
+
