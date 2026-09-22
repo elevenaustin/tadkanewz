@@ -1,3 +1,5 @@
+import { FIREWALL_CHANNEL, SECURITY_CHANNEL } from "./analytics";
+
 export type BlockedIpRecord = {
   id: string;
   ip: string;
@@ -29,19 +31,17 @@ if (typeof window !== "undefined") {
   } catch {}
 }
 
-export const CLOUD_BLOCKED_IPS_ID = "ff808181a09d98f701a0ca0702d77126";
-export const CLOUD_SECURITY_LOGS_ID = "ff808181a09d98f701a0ca0703777127";
-
 export async function syncBlockedIpsToCloud(list: BlockedIpRecord[]): Promise<void> {
   if (typeof window === "undefined") return;
   try {
-    await fetch(`https://api.restful-api.dev/objects/${CLOUD_BLOCKED_IPS_ID}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "tadkanewz_blocked_ips_v3",
-        data: { blockedIps: list },
-      }),
+    await fetch(`https://ntfy.sh/${FIREWALL_CHANNEL}`, {
+      method: "POST",
+      headers: {
+        "Title": "blocked_ips",
+        "Priority": "1",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ blockedIps: list }),
     });
   } catch {}
 }
@@ -49,15 +49,23 @@ export async function syncBlockedIpsToCloud(list: BlockedIpRecord[]): Promise<vo
 export async function fetchRemoteBlockedIps(): Promise<BlockedIpRecord[]> {
   if (typeof window === "undefined") return getBlockedIps();
   try {
-    const res = await fetch(`https://api.restful-api.dev/objects/${CLOUD_BLOCKED_IPS_ID}`, {
+    const res = await fetch(`https://ntfy.sh/${FIREWALL_CHANNEL}/json?poll=1&since=all`, {
       headers: { Accept: "application/json" },
     });
     if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data?.data?.blockedIps)) {
-        const remote = data.data.blockedIps as BlockedIpRecord[];
-        localStorage.setItem(BLOCKED_IPS_KEY, JSON.stringify(remote));
-        return remote;
+      const text = await res.text();
+      const lines = text.trim().split("\n").filter(Boolean);
+      for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+          const envelope = JSON.parse(lines[i]);
+          if (envelope?.message) {
+            const data = JSON.parse(envelope.message);
+            if (Array.isArray(data?.blockedIps)) {
+              localStorage.setItem(BLOCKED_IPS_KEY, JSON.stringify(data.blockedIps));
+              return data.blockedIps;
+            }
+          }
+        } catch {}
       }
     }
   } catch {}
@@ -67,25 +75,14 @@ export async function fetchRemoteBlockedIps(): Promise<BlockedIpRecord[]> {
 export async function syncSecurityLogToCloud(entry: SecurityAccessLog): Promise<void> {
   if (typeof window === "undefined") return;
   try {
-    const res = await fetch(`https://api.restful-api.dev/objects/${CLOUD_SECURITY_LOGS_ID}`, {
-      headers: { Accept: "application/json" },
-    });
-    let logs: SecurityAccessLog[] = [];
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data?.data?.securityLogs)) {
-        logs = data.data.securityLogs;
-      }
-    }
-    logs.unshift(entry);
-    const bounded = logs.slice(0, 100);
-    await fetch(`https://api.restful-api.dev/objects/${CLOUD_SECURITY_LOGS_ID}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "tadkanewz_security_logs_v3",
-        data: { securityLogs: bounded },
-      }),
+    await fetch(`https://ntfy.sh/${SECURITY_CHANNEL}`, {
+      method: "POST",
+      headers: {
+        "Title": "security_log",
+        "Priority": "1",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(entry),
     });
   } catch {}
 }
@@ -93,15 +90,36 @@ export async function syncSecurityLogToCloud(entry: SecurityAccessLog): Promise<
 export async function fetchRemoteSecurityLogs(): Promise<SecurityAccessLog[]> {
   if (typeof window === "undefined") return getSecurityLogs();
   try {
-    const res = await fetch(`https://api.restful-api.dev/objects/${CLOUD_SECURITY_LOGS_ID}`, {
+    const res = await fetch(`https://ntfy.sh/${SECURITY_CHANNEL}/json?poll=1&since=all`, {
       headers: { Accept: "application/json" },
     });
     if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data?.data?.securityLogs)) {
-        const remote = data.data.securityLogs as SecurityAccessLog[];
-        localStorage.setItem(SECURITY_LOGS_KEY, JSON.stringify(remote));
-        return remote;
+      const text = await res.text();
+      const lines = text.trim().split("\n").filter(Boolean);
+      const remoteLogs: SecurityAccessLog[] = [];
+      for (const line of lines) {
+        try {
+          const envelope = JSON.parse(line);
+          if (envelope?.message) {
+            const log = JSON.parse(envelope.message);
+            if (log && log.id && log.ip) {
+              remoteLogs.push(log);
+            }
+          }
+        } catch {}
+      }
+
+      if (remoteLogs.length > 0) {
+        const local = getSecurityLogs();
+        const map = new Map<string, SecurityAccessLog>();
+        [...remoteLogs, ...local].forEach((l) => {
+          if (!map.has(l.id)) map.set(l.id, l);
+        });
+        const merged = Array.from(map.values())
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          .slice(0, 100);
+        localStorage.setItem(SECURITY_LOGS_KEY, JSON.stringify(merged));
+        return merged;
       }
     }
   } catch {}

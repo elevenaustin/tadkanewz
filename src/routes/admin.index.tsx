@@ -76,6 +76,9 @@ import {
   setRetentionPeriodDays,
   clearAllAnalyticsData,
   pruneOldSessions,
+  TELEMETRY_CHANNEL,
+  FIREWALL_CHANNEL,
+  SECURITY_CHANNEL,
   type SessionRecord,
   type AnalyticsSummary,
 } from "@/lib/analytics";
@@ -140,12 +143,70 @@ function AdminDashboardPage() {
     loadData();
     setRetentionDays(getRetentionPeriodDays());
 
-    // Auto-poll cloud every 5 seconds for live remote mobile visits
+    // 1. Live real-time push events from mobile devices & other browsers
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(`https://ntfy.sh/${TELEMETRY_CHANNEL}/sse`);
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload?.message) {
+            const incoming = JSON.parse(payload.message);
+            if (incoming?.type === "clear_all") {
+              setSessions([]);
+              setSummary(getAnalyticsSummary());
+              return;
+            }
+            if (incoming?.sessionId) {
+              setSessions((prev) => {
+                const idx = prev.findIndex((s) => s.sessionId === incoming.sessionId);
+                let next: SessionRecord[];
+                if (idx >= 0) {
+                  next = [...prev];
+                  next[idx] = { ...next[idx], ...incoming };
+                } else {
+                  next = [incoming, ...prev];
+                }
+                localStorage.setItem("tadkanewz_analytics_sessions_v2", JSON.stringify(next));
+                return next;
+              });
+              setTimeout(() => {
+                setSummary(getAnalyticsSummary());
+              }, 50);
+            }
+          }
+        } catch {}
+      };
+    } catch {}
+
+    // 2. Live firewall block updates
+    let firewallSource: EventSource | null = null;
+    try {
+      firewallSource = new EventSource(`https://ntfy.sh/${FIREWALL_CHANNEL}/sse`);
+      firewallSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload?.message) {
+            const data = JSON.parse(payload.message);
+            if (Array.isArray(data?.blockedIps)) {
+              setBlockedIps(data.blockedIps);
+              localStorage.setItem("tadkanewz_blocked_ips_v2", JSON.stringify(data.blockedIps));
+            }
+          }
+        } catch {}
+      };
+    } catch {}
+
+    // 3. Fallback poll every 5 seconds
     const pollInterval = setInterval(() => {
       loadData(false);
     }, 5000);
 
-    return () => clearInterval(pollInterval);
+    return () => {
+      if (eventSource) eventSource.close();
+      if (firewallSource) firewallSource.close();
+      clearInterval(pollInterval);
+    };
   }, [navigate]);
 
   const loadData = (showLoading = true) => {
@@ -283,6 +344,10 @@ function AdminDashboardPage() {
             <Brand />
             <span className="hidden sm:inline-block rounded-md bg-red-600 px-2.5 py-0.5 text-[11px] font-black tracking-wider text-white uppercase">
               ADMIN PORTAL
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+              Live Sync
             </span>
           </div>
 

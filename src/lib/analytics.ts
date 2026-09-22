@@ -45,7 +45,9 @@ export type AnalyticsSummary = {
 const SESSIONS_STORAGE_KEY = "tadkanewz_analytics_sessions_v2";
 const RETENTION_KEY = "tadkanewz_analytics_retention_days";
 const CURRENT_SESSION_ID_KEY = "tadkanewz_current_session_id";
-export const CLOUD_SESSIONS_ID = "ff808181a09d98f701a0ca0702337125";
+export const TELEMETRY_CHANNEL = "tadkanewz_prod_telemetry_live_v5";
+export const FIREWALL_CHANNEL = "tadkanewz_prod_firewall_live_v5";
+export const SECURITY_CHANNEL = "tadkanewz_prod_security_live_v5";
 
 // Automatically clear legacy demo sessions if present
 if (typeof window !== "undefined") {
@@ -182,7 +184,29 @@ export async function getClientPublicIp(): Promise<string> {
       return saved;
     }
 
-    // Provider 1: ipwho.is (fast, HTTPS, provides real IP + region)
+    // Provider 1 (Primary): Native Server Edge API
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch("/api/my-ip", {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (data && data.ip && data.ip !== "127.0.0.1") {
+          cachedClientIp = data.ip;
+          sessionStorage.setItem("tadkanewz_cached_client_ip", data.ip);
+          updateSessionIp(data.ip, data.approxRegion || undefined);
+          return data.ip;
+        }
+      }
+    } catch {
+      // Continue to next provider
+    }
+
+    // Provider 2: ipwho.is (fast, HTTPS, provides real IP + region)
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500);
@@ -204,7 +228,7 @@ export async function getClientPublicIp(): Promise<string> {
       // Continue to next provider
     }
 
-    // Provider 2: api64.ipify.org (IPv4/IPv6)
+    // Provider 3: api64.ipify.org (IPv4/IPv6)
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500);
@@ -225,7 +249,7 @@ export async function getClientPublicIp(): Promise<string> {
       // Continue to next provider
     }
 
-    // Provider 3: api.ipify.org (IPv4 fallback)
+    // Provider 4: api.ipify.org (IPv4 fallback)
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500);
@@ -246,7 +270,7 @@ export async function getClientPublicIp(): Promise<string> {
       // Continue
     }
 
-    // Provider 4: icanhazip.com fallback
+    // Provider 5: icanhazip.com fallback
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500);
@@ -276,39 +300,20 @@ export function debouncedSyncToCloud(session: SessionRecord): void {
   if (syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = setTimeout(() => {
     syncSessionToCloud(session).catch(() => {});
-  }, 400);
+  }, 200);
 }
 
 export async function syncSessionToCloud(session: SessionRecord): Promise<void> {
   if (typeof window === "undefined" || !session) return;
   try {
-    const res = await fetch(`https://api.restful-api.dev/objects/${CLOUD_SESSIONS_ID}`, {
-      headers: { Accept: "application/json" },
-    });
-    let sessions: SessionRecord[] = [];
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data?.data?.sessions)) {
-        sessions = data.data.sessions;
-      }
-    }
-
-    const idx = sessions.findIndex((s) => s.sessionId === session.sessionId);
-    if (idx >= 0) {
-      sessions[idx] = { ...sessions[idx], ...session };
-    } else {
-      sessions.unshift(session);
-    }
-
-    const bounded = sessions.slice(0, 300);
-
-    await fetch(`https://api.restful-api.dev/objects/${CLOUD_SESSIONS_ID}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "tadkanewz_sessions_cloud_v3",
-        data: { sessions: bounded },
-      }),
+    await fetch(`https://ntfy.sh/${TELEMETRY_CHANNEL}`, {
+      method: "POST",
+      headers: {
+        "Title": "session_update",
+        "Priority": "1",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(session),
     });
   } catch (e) {
     // Failover
@@ -318,24 +323,37 @@ export async function syncSessionToCloud(session: SessionRecord): Promise<void> 
 export async function fetchRemoteSessions(): Promise<SessionRecord[]> {
   if (typeof window === "undefined") return getAllSessions();
   try {
-    const res = await fetch(`https://api.restful-api.dev/objects/${CLOUD_SESSIONS_ID}`, {
+    const res = await fetch(`https://ntfy.sh/${TELEMETRY_CHANNEL}/json?poll=1&since=all`, {
       headers: { Accept: "application/json" },
     });
     if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data?.data?.sessions)) {
-        const remote = data.data.sessions as SessionRecord[];
+      const text = await res.text();
+      const lines = text.trim().split("\n").filter(Boolean);
+      const remoteSessions: SessionRecord[] = [];
+      for (const line of lines) {
+        try {
+          const envelope = JSON.parse(line);
+          if (envelope && envelope.message) {
+            const sess = JSON.parse(envelope.message);
+            if (sess && sess.sessionId) {
+              remoteSessions.push(sess);
+            }
+          }
+        } catch {}
+      }
+
+      if (remoteSessions.length > 0) {
         const local = getAllSessions();
         const map = new Map<string, SessionRecord>();
 
-        // Merge remote and local
-        [...remote, ...local].forEach((s) => {
+        // Merge remote and local sessions by sessionId
+        [...remoteSessions, ...local].forEach((s) => {
           if (!map.has(s.sessionId)) {
             map.set(s.sessionId, s);
           } else {
             const cur = map.get(s.sessionId)!;
             if (new Date(s.lastActivity).getTime() >= new Date(cur.lastActivity).getTime()) {
-              map.set(s.sessionId, s);
+              map.set(s.sessionId, { ...cur, ...s });
             }
           }
         });
@@ -558,13 +576,10 @@ export function getAnalyticsSummary(): AnalyticsSummary {
 export function clearAllAnalyticsData(): void {
   if (typeof window !== "undefined") {
     localStorage.removeItem(SESSIONS_STORAGE_KEY);
-    fetch(`https://api.restful-api.dev/objects/${CLOUD_SESSIONS_ID}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "tadkanewz_sessions_cloud_v3",
-        data: { sessions: [] },
-      }),
+    fetch(`https://ntfy.sh/${TELEMETRY_CHANNEL}`, {
+      method: "POST",
+      headers: { "Title": "clear_all", "Priority": "1" },
+      body: JSON.stringify({ type: "clear_all", at: new Date().toISOString() }),
     }).catch(() => {});
   }
 }
