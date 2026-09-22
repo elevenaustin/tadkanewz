@@ -16,7 +16,14 @@ const AUTH_TOKEN_KEY = "tadkanewz_admin_session_token";
 const USER_INFO_KEY = "tadkanewz_admin_user_info";
 const FAILED_ATTEMPTS_KEY = "tadkanewz_admin_failed_attempts";
 const LOCKOUT_KEY = "tadkanewz_admin_lockout_until";
-const AUDIT_LOGS_KEY = "tadkanewz_admin_audit_logs";
+const AUDIT_LOGS_KEY = "tadkanewz_admin_audit_logs_v2";
+
+// Clear legacy audit logs if present
+if (typeof window !== "undefined") {
+  try {
+    localStorage.removeItem("tadkanewz_admin_audit_logs");
+  } catch {}
+}
 
 // Read from env with development fallback
 export function getExpectedAdminCredentials() {
@@ -128,17 +135,7 @@ export function getAuditLogs(): AuditLogEntry[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(AUDIT_LOGS_KEY);
-    if (!raw) {
-      return [
-        {
-          id: "log_1",
-          action: "System Initialized",
-          details: "TadkaNewz Admin Portal and Analytics active",
-          timestamp: new Date().toISOString(),
-          user: "System",
-        },
-      ];
-    }
+    if (!raw) return [];
     return JSON.parse(raw) as AuditLogEntry[];
   } catch {
     return [];

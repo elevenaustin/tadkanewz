@@ -18,38 +18,25 @@ export type SecurityAccessLog = {
   userAgent?: string;
 };
 
-const BLOCKED_IPS_KEY = "tadkanewz_blocked_ips_list";
-const SECURITY_LOGS_KEY = "tadkanewz_security_access_logs";
+const BLOCKED_IPS_KEY = "tadkanewz_blocked_ips_v2";
+const SECURITY_LOGS_KEY = "tadkanewz_security_access_logs_v2";
 
-// Initial sample blocked IPs for firewall simulation
-const DEFAULT_BLOCKED_IPS: BlockedIpRecord[] = [
-  {
-    id: "blk_1",
-    ip: "198.51.100.42",
-    reason: "Suspicious automated scraping / Bot traffic",
-    blockedAt: "2026-09-22T10:15:00.000Z",
-    blockedBy: "Admin",
-  },
-  {
-    id: "blk_2",
-    ip: "203.0.113.88",
-    reason: "Excessive rapid requests / Rate limit violation",
-    blockedAt: "2026-09-22T11:30:00.000Z",
-    blockedBy: "Admin",
-  },
-];
+// Clear legacy demo keys if present
+if (typeof window !== "undefined") {
+  try {
+    localStorage.removeItem("tadkanewz_blocked_ips_list");
+    localStorage.removeItem("tadkanewz_security_access_logs");
+  } catch {}
+}
 
 export function getBlockedIps(): BlockedIpRecord[] {
-  if (typeof window === "undefined") return DEFAULT_BLOCKED_IPS;
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(BLOCKED_IPS_KEY);
-    if (!raw) {
-      localStorage.setItem(BLOCKED_IPS_KEY, JSON.stringify(DEFAULT_BLOCKED_IPS));
-      return DEFAULT_BLOCKED_IPS;
-    }
+    if (!raw) return [];
     return JSON.parse(raw) as BlockedIpRecord[];
   } catch {
-    return DEFAULT_BLOCKED_IPS;
+    return [];
   }
 }
 
@@ -115,12 +102,10 @@ export function getSecurityLogs(): SecurityAccessLog[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(SECURITY_LOGS_KEY);
-    if (!raw) {
-      return generateInitialSecurityLogs();
-    }
+    if (!raw) return [];
     return JSON.parse(raw) as SecurityAccessLog[];
   } catch {
-    return generateInitialSecurityLogs();
+    return [];
   }
 }
 
@@ -150,58 +135,4 @@ export function logSecurityAccess(
   } catch (e) {
     console.error("Failed to log security access:", e);
   }
-}
-
-function generateInitialSecurityLogs(): SecurityAccessLog[] {
-  const now = Date.now();
-  const cached = typeof window !== "undefined" ? sessionStorage.getItem("tadkanewz_cached_client_ip") : null;
-  return [
-    {
-      id: "sec_1",
-      ip: cached || "49.36.12.80",
-      maskedIp: maskIp(cached || "49.36.12.80"),
-      path: "/newslink",
-      timestamp: new Date(now - 2 * 60 * 1000).toISOString(),
-      status: "Allowed",
-      countryOrRegion: "Punjab, India",
-    },
-    {
-      id: "sec_2",
-      ip: "106.213.82.112",
-      maskedIp: "106.213.***.***",
-      path: "/category/entertainment",
-      timestamp: new Date(now - 5 * 60 * 1000).toISOString(),
-      status: "Allowed",
-      countryOrRegion: "Amritsar, Punjab",
-    },
-    {
-      id: "sec_3",
-      ip: "198.51.100.42",
-      maskedIp: "198.51.***.***",
-      path: "/admin/login",
-      timestamp: new Date(now - 12 * 60 * 1000).toISOString(),
-      status: "Blocked",
-      reason: "IP in firewall blocklist",
-      countryOrRegion: "Suspicious Proxy",
-    },
-    {
-      id: "sec_4",
-      ip: "142.250.180.206",
-      maskedIp: "142.250.***.***",
-      path: "/write",
-      timestamp: new Date(now - 18 * 60 * 1000).toISOString(),
-      status: "Allowed",
-      countryOrRegion: "Toronto, Canada",
-    },
-    {
-      id: "sec_5",
-      ip: "203.0.113.88",
-      maskedIp: "203.0.***.***",
-      path: "/api/search",
-      timestamp: new Date(now - 25 * 60 * 1000).toISOString(),
-      status: "Blocked",
-      reason: "Rate limit violation",
-      countryOrRegion: "Unwanted Bot Network",
-    },
-  ];
 }

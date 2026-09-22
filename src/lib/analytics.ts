@@ -42,9 +42,16 @@ export type AnalyticsSummary = {
   timelineData: { time: string; visitors: number; pageViews: number }[];
 };
 
-const SESSIONS_STORAGE_KEY = "tadkanewz_analytics_sessions_v1";
+const SESSIONS_STORAGE_KEY = "tadkanewz_analytics_sessions_v2";
 const RETENTION_KEY = "tadkanewz_analytics_retention_days";
 const CURRENT_SESSION_ID_KEY = "tadkanewz_current_session_id";
+
+// Automatically clear legacy demo sessions if present
+if (typeof window !== "undefined") {
+  try {
+    localStorage.removeItem("tadkanewz_analytics_sessions_v1");
+  } catch {}
+}
 
 // Safe device detection
 function getDeviceCategory(): "Desktop" | "Mobile" | "Tablet" {
@@ -359,13 +366,23 @@ export function recordPageView(path: string, title?: string): void {
   }
 }
 
-// Compute aggregate summary for the admin dashboard
+// Compute aggregate summary for the admin dashboard (100% live recorded data)
 export function getAnalyticsSummary(): AnalyticsSummary {
   const sessions = getAllSessions();
 
-  // If no sessions exist yet, populate with realistic initial baseline for demonstration
   if (sessions.length === 0) {
-    return generateBaselineSummary();
+    return {
+      totalVisitors: 0,
+      activeSessionsNow: 0,
+      totalPageViews: 0,
+      avgPagesPerSession: 0,
+      topArticles: [],
+      trafficSources: [],
+      deviceBreakdown: [],
+      regionDistribution: [],
+      consentBreakdown: [],
+      timelineData: [],
+    };
   }
 
   const nowMs = Date.now();
@@ -385,11 +402,17 @@ export function getAnalyticsSummary(): AnalyticsSummary {
       activeSessionsNow++;
     }
 
-    deviceCounts[sess.deviceCategory] = (deviceCounts[sess.deviceCategory] || 0) + 1;
-    regionCounts[sess.approxRegion] = (regionCounts[sess.approxRegion] || 0) + 1;
-    consentCounts[sess.consentStatus] = (consentCounts[sess.consentStatus] || 0) + 1;
+    if (sess.deviceCategory) {
+      deviceCounts[sess.deviceCategory] = (deviceCounts[sess.deviceCategory] || 0) + 1;
+    }
+    if (sess.approxRegion) {
+      regionCounts[sess.approxRegion] = (regionCounts[sess.approxRegion] || 0) + 1;
+    }
+    if (sess.consentStatus) {
+      consentCounts[sess.consentStatus] = (consentCounts[sess.consentStatus] || 0) + 1;
+    }
 
-    const ref = sess.referrer || "Direct";
+    const ref = sess.referrer || "Direct Traffic";
     referrerCounts[ref] = (referrerCounts[ref] || 0) + 1;
 
     sess.pagesViewed.forEach((p) => {
@@ -403,7 +426,7 @@ export function getAnalyticsSummary(): AnalyticsSummary {
   const topArticles = Object.entries(pageViewCounts)
     .map(([path, data]) => ({ path, title: data.title, views: data.count }))
     .sort((a, b) => b.views - a.views)
-    .slice(0, 5);
+    .slice(0, 10);
 
   const trafficSources = Object.entries(referrerCounts).map(([name, value]) => ({
     name: name === "Direct" || name === "" ? "Direct Traffic" : name,
@@ -424,92 +447,22 @@ export function getAnalyticsSummary(): AnalyticsSummary {
     value,
   }));
 
-  // Timeline points
   const timelineData = [
-    { time: "09:00", visitors: 42, pageViews: 110 },
-    { time: "11:00", visitors: 68, pageViews: 185 },
-    { time: "13:00", visitors: 94, pageViews: 260 },
-    { time: "15:00", visitors: 140, pageViews: 380 },
-    { time: "17:00", visitors: 186, pageViews: 490 },
-    { time: "Now", visitors: sessions.length, pageViews: totalPageViews },
+    { time: "Start", visitors: Math.max(0, sessions.length - activeSessionsNow), pageViews: Math.max(0, totalPageViews - activeSessionsNow) },
+    { time: "Now (Live)", visitors: sessions.length, pageViews: totalPageViews },
   ];
 
   return {
     totalVisitors: sessions.length,
-    activeSessionsNow: Math.max(activeSessionsNow, 1),
-    totalPageViews: Math.max(totalPageViews, sessions.length),
-    avgPagesPerSession: sessions.length ? Math.round((totalPageViews / sessions.length) * 10) / 10 : 1,
-    topArticles: topArticles.length > 0 ? topArticles : [
-      { path: "/newslink", title: "ਵੱਡੀ ਖ਼ਬਰ : ਗੁਲਾਬ ਸਿੱਧੂ ਦੇ ਘਰ 'ਤੇ ਫਾਇਰਿੰਗ ਕਰਨ ਵਾਲੇ ਸ਼ੂਟਰਾਂ ਦਾ ਐਨਕਾਊਂਟਰ", views: 240 },
-      { path: "/entertainment/gulab-sidhu-new-song", title: "ਗੁਲਾਬ ਸਿੱਧੂ ਦੇ ਨਵੇਂ ਗੀਤ ਨੂੰ ਲੈ ਕੇ ਪ੍ਰਸ਼ੰਸਕਾਂ ਵਿੱਚ ਛਾਈ ਖੁਸ਼ੀ", views: 180 },
-      { path: "/punjab/today-big-update", title: "ਪੰਜਾਬ ਨਾਲ ਜੁੜੀ ਅੱਜ ਦੀ ਸਭ ਤੋਂ ਵੱਡੀ ਖ਼ਬਰ", views: 145 },
-    ],
-    trafficSources: trafficSources.length > 0 ? trafficSources : [
-      { name: "Direct Traffic", value: 120 },
-      { name: "WhatsApp Shares", value: 85 },
-      { name: "Google Search", value: 65 },
-      { name: "Facebook", value: 40 },
-    ],
-    deviceBreakdown: deviceBreakdown.length > 0 ? deviceBreakdown : [
-      { name: "Mobile", value: 210 },
-      { name: "Desktop", value: 75 },
-      { name: "Tablet", value: 25 },
-    ],
-    regionDistribution: regionDistribution.length > 0 ? regionDistribution : [
-      { name: "Punjab / India", value: 190 },
-      { name: "Canada (NRI Diaspora)", value: 60 },
-      { name: "United Kingdom", value: 35 },
-      { name: "United States", value: 25 },
-    ],
-    consentBreakdown: consentBreakdown.length > 0 ? consentBreakdown : [
-      { name: "Full Consent", value: 240 },
-      { name: "Essential Only", value: 50 },
-    ],
+    activeSessionsNow,
+    totalPageViews,
+    avgPagesPerSession: sessions.length ? Math.round((totalPageViews / sessions.length) * 10) / 10 : 0,
+    topArticles,
+    trafficSources,
+    deviceBreakdown,
+    regionDistribution,
+    consentBreakdown,
     timelineData,
-  };
-}
-
-function generateBaselineSummary(): AnalyticsSummary {
-  return {
-    totalVisitors: 310,
-    activeSessionsNow: 14,
-    totalPageViews: 742,
-    avgPagesPerSession: 2.4,
-    topArticles: [
-      { path: "/newslink", title: "ਵੱਡੀ ਖ਼ਬਰ : ਗੁਲਾਬ ਸਿੱਧੂ ਦੇ ਘਰ 'ਤੇ ਫਾਇਰਿੰਗ ਕਰਨ ਵਾਲੇ ਸ਼ੂਟਰਾਂ ਦਾ ਐਨਕਾਊਂਟਰ", views: 345 },
-      { path: "/entertainment/gulab-sidhu-new-song", title: "ਗੁਲਾਬ ਸਿੱਧੂ ਦੇ ਨਵੇਂ ਗੀਤ ਨੂੰ ਲੈ ਕੇ ਪ੍ਰਸ਼ੰਸਕਾਂ ਵਿੱਚ ਛਾਈ ਖੁਸ਼ੀ", views: 185 },
-      { path: "/punjab/today-big-update", title: "ਪੰਜਾਬ ਨਾਲ ਜੁੜੀ ਅੱਜ ਦੀ ਸਭ ਤੋਂ ਵੱਡੀ ਖ਼ਬਰ, ਲੋਕਾਂ ਲਈ ਹੋਇਆ ਅਹਿਮ ਐਲਾਨ", views: 142 },
-      { path: "/sports/punjab-hockey-victory", title: "ਪੰਜਾਬ ਦੇ ਨੌਜਵਾਨ ਖਿਡਾਰੀਆਂ ਨੇ ਹਾਕੀ ਮੈਦਾਨ ਵਿੱਚ ਰਚਿਆ ਨਵਾਂ ਇਤਿਹਾਸ", views: 98 },
-    ],
-    trafficSources: [
-      { name: "Direct Traffic", value: 140 },
-      { name: "WhatsApp Share", value: 95 },
-      { name: "Google Search", value: 55 },
-      { name: "Facebook", value: 20 },
-    ],
-    deviceBreakdown: [
-      { name: "Mobile", value: 225 },
-      { name: "Desktop", value: 65 },
-      { name: "Tablet", value: 20 },
-    ],
-    regionDistribution: [
-      { name: "Punjab / India", value: 185 },
-      { name: "Canada (Diaspora)", value: 65 },
-      { name: "United Kingdom", value: 35 },
-      { name: "United States", value: 25 },
-    ],
-    consentBreakdown: [
-      { name: "Full Consent", value: 275 },
-      { name: "Essential Only", value: 35 },
-    ],
-    timelineData: [
-      { time: "09:00", visitors: 35, pageViews: 80 },
-      { time: "11:00", visitors: 65, pageViews: 155 },
-      { time: "13:00", visitors: 95, pageViews: 230 },
-      { time: "15:00", visitors: 150, pageViews: 390 },
-      { time: "17:00", visitors: 220, pageViews: 540 },
-      { time: "Now", visitors: 310, pageViews: 742 },
-    ],
   };
 }
 

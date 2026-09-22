@@ -447,34 +447,41 @@ function AdminDashboardPage() {
             </div>
 
             {/* Breaking News Performance Banner */}
-            <div className="rounded-xl border-2 border-red-500/30 bg-gradient-to-r from-red-600/10 via-background to-background p-5 shadow-sm">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="grid size-10 place-items-center rounded-full bg-red-600 text-white shadow shrink-0">
-                    <Flame className="size-5" />
+            {summary.topArticles.length > 0 ? (
+              <div className="rounded-xl border-2 border-red-500/30 bg-gradient-to-r from-red-600/10 via-background to-background p-5 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-10 place-items-center rounded-full bg-red-600 text-white shadow shrink-0">
+                      <Flame className="size-5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-red-600">
+                        TOP TRENDING ARTICLE (ਅੱਜ ਦੀ ਸਭ ਤੋਂ ਵੱਧ ਪੜ੍ਹੀ ਗਈ ਖ਼ਬਰ)
+                      </span>
+                      <h3 className="text-base font-black text-foreground mt-0.5">
+                        {summary.topArticles[0].title}
+                      </h3>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-red-600">
-                      TOP TRENDING ARTICLE (ਅੱਜ ਦੀ ਸਭ ਤੋਂ ਵੱਧ ਪੜ੍ਹੀ ਗਈ ਖ਼ਬਰ)
-                    </span>
-                    <h3 className="text-base font-black text-foreground mt-0.5">
-                      {summary.topArticles[0]?.title || "ਵੱਡੀ ਖ਼ਬਰ : ਗੁਲਾਬ ਸਿੱਧੂ ਦੇ ਘਰ 'ਤੇ ਫਾਇਰਿੰਗ ਕਰਨ ਵਾਲੇ ਸ਼ੂਟਰਾਂ ਦਾ ਐਨਕਾਊਂਟਰ"}
-                    </h3>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Badge variant="default" className="bg-red-600 font-bold">
+                      {summary.topArticles[0].views} Views
+                    </Badge>
+                    <Link
+                      to={summary.topArticles[0].path}
+                      className="inline-flex items-center gap-1 rounded-sm border border-input bg-background px-3 py-1.5 text-xs font-bold hover:bg-muted"
+                    >
+                      View Page <ExternalLink className="size-3" />
+                    </Link>
                   </div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <Badge variant="default" className="bg-red-600 font-bold">
-                    {summary.topArticles[0]?.views || 345} Views
-                  </Badge>
-                  <Link
-                    to="/newslink"
-                    className="inline-flex items-center gap-1 rounded-sm border border-input bg-background px-3 py-1.5 text-xs font-bold hover:bg-muted"
-                  >
-                    View Page <ExternalLink className="size-3" />
-                  </Link>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-border bg-card/60 p-5 text-center text-xs text-muted-foreground">
+                <Flame className="size-5 text-muted-foreground/40 mx-auto mb-1.5" />
+                <span>No trending articles yet. Live page views will appear here as visitors read articles.</span>
+              </div>
+            )}
 
             {/* Charts Grid */}
             <div className="grid gap-6 lg:grid-cols-2">
@@ -487,43 +494,50 @@ function AdminDashboardPage() {
                   </h3>
                   <Badge variant="outline" className="text-xs">Live Trend</Badge>
                 </div>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={summary.timelineData}>
-                      <defs>
-                        <linearGradient id="colorPv" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stop-color="#DC2626" stop-opacity={0.8} />
-                          <stop offset="95%" stop-color="#DC2626" stop-opacity={0} />
-                        </linearGradient>
-                        <linearGradient id="colorVis" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stop-color="#2563EB" stop-opacity={0.8} />
-                          <stop offset="95%" stop-color="#2563EB" stop-opacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                      <XAxis dataKey="time" textAnchor="end" fontSize={11} />
-                      <YAxis fontSize={11} />
-                      <Tooltip />
-                      <Legend />
-                      <Area
-                        type="monotone"
-                        dataKey="pageViews"
-                        name="Page Views"
-                        stroke="#DC2626"
-                        fillOpacity={1}
-                        fill="url(#colorPv)"
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="visitors"
-                        name="Visitors"
-                        stroke="#2563EB"
-                        fillOpacity={1}
-                        fill="url(#colorVis)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                {summary.totalVisitors === 0 ? (
+                  <div className="h-64 flex flex-col items-center justify-center text-xs text-muted-foreground">
+                    <Activity className="size-8 text-muted-foreground/30 mb-2" />
+                    <span>No traffic recorded today yet.</span>
+                  </div>
+                ) : (
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={summary.timelineData}>
+                        <defs>
+                          <linearGradient id="colorPv" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stop-color="#DC2626" stop-opacity={0.8} />
+                            <stop offset="95%" stop-color="#DC2626" stop-opacity={0} />
+                          </linearGradient>
+                          <linearGradient id="colorVis" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stop-color="#2563EB" stop-opacity={0.8} />
+                            <stop offset="95%" stop-color="#2563EB" stop-opacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                        <XAxis dataKey="time" textAnchor="end" fontSize={11} />
+                        <YAxis fontSize={11} />
+                        <Tooltip />
+                        <Legend />
+                        <Area
+                          type="monotone"
+                          dataKey="pageViews"
+                          name="Page Views"
+                          stroke="#DC2626"
+                          fillOpacity={1}
+                          fill="url(#colorPv)"
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="visitors"
+                          name="Visitors"
+                          stroke="#2563EB"
+                          fillOpacity={1}
+                          fill="url(#colorVis)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
 
               {/* Traffic Sources Breakdown */}
@@ -535,30 +549,37 @@ function AdminDashboardPage() {
                   </h3>
                   <span className="text-xs text-muted-foreground">Aggregated</span>
                 </div>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={summary.trafficSources}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        fontSize={11}
-                      >
-                        {summary.trafficSources.map((_, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={PIE_COLORS[index % PIE_COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+                {summary.trafficSources.length === 0 ? (
+                  <div className="h-64 flex flex-col items-center justify-center text-xs text-muted-foreground">
+                    <PieIcon className="size-8 text-muted-foreground/30 mb-2" />
+                    <span>No traffic sources recorded yet.</span>
+                  </div>
+                ) : (
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={summary.trafficSources}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={80}
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          fontSize={11}
+                        >
+                          {summary.trafficSources.map((_, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={PIE_COLORS[index % PIE_COLORS.length]}
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
 
               {/* Device Category Breakdown */}
@@ -570,17 +591,24 @@ function AdminDashboardPage() {
                   </h3>
                   <span className="text-xs text-muted-foreground">Mobile vs Desktop</span>
                 </div>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={summary.deviceBreakdown}>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                      <XAxis dataKey="name" fontSize={12} />
-                      <YAxis fontSize={12} />
-                      <Tooltip />
-                      <Bar dataKey="value" name="Visitors" fill="#DC2626" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {summary.deviceBreakdown.length === 0 ? (
+                  <div className="h-64 flex flex-col items-center justify-center text-xs text-muted-foreground">
+                    <Smartphone className="size-8 text-muted-foreground/30 mb-2" />
+                    <span>No device data recorded yet.</span>
+                  </div>
+                ) : (
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={summary.deviceBreakdown}>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                        <XAxis dataKey="name" fontSize={12} />
+                        <YAxis fontSize={12} />
+                        <Tooltip />
+                        <Bar dataKey="value" name="Visitors" fill="#DC2626" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
 
               {/* Geographical / Regional Distribution */}
@@ -590,29 +618,36 @@ function AdminDashboardPage() {
                     <Globe className="size-4 text-primary" />
                     Reader Geography (ਖੇਤਰੀ ਵੰਡ)
                   </h3>
-                  <span className="text-xs text-muted-foreground">Safe Timezone/Region</span>
+                  <span className="text-xs text-muted-foreground">Timezone / Location</span>
                 </div>
-                <div className="space-y-3 pt-2">
-                  {summary.regionDistribution.map((reg, idx) => (
-                    <div key={reg.name} className="space-y-1">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span>{reg.name}</span>
-                        <span className="text-muted-foreground">{reg.value} sessions</span>
+                {summary.regionDistribution.length === 0 ? (
+                  <div className="py-12 flex flex-col items-center justify-center text-xs text-muted-foreground">
+                    <Globe className="size-8 text-muted-foreground/30 mb-2" />
+                    <span>No regional visitor data yet.</span>
+                  </div>
+                ) : (
+                  <div className="space-y-3 pt-2">
+                    {summary.regionDistribution.map((reg) => (
+                      <div key={reg.name} className="space-y-1">
+                        <div className="flex justify-between text-xs font-bold">
+                          <span>{reg.name}</span>
+                          <span className="text-muted-foreground">{reg.value} sessions</span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full bg-primary"
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                (reg.value / (summary.totalVisitors || 1)) * 100
+                              )}%`,
+                            }}
+                          />
+                        </div>
                       </div>
-                      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full bg-primary"
-                          style={{
-                            width: `${Math.min(
-                              100,
-                              (reg.value / (summary.totalVisitors || 1)) * 100
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -633,22 +668,30 @@ function AdminDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {summary.topArticles.map((art, idx) => (
-                      <tr key={art.path} className="hover:bg-muted/40 transition-colors">
-                        <td className="py-3 px-3 font-bold text-muted-foreground">{idx + 1}</td>
-                        <td className="py-3 px-3 font-bold text-foreground">
-                          <Link to={art.path} className="hover:text-primary transition-colors">
-                            {art.title}
-                          </Link>
-                        </td>
-                        <td className="py-3 px-3 font-mono text-xs text-muted-foreground">
-                          {art.path}
-                        </td>
-                        <td className="py-3 px-3 text-right font-black text-primary">
-                          {art.views}
+                    {summary.topArticles.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-muted-foreground text-xs">
+                          No page view telemetry recorded yet.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      summary.topArticles.map((art, idx) => (
+                        <tr key={art.path} className="hover:bg-muted/40 transition-colors">
+                          <td className="py-3 px-3 font-bold text-muted-foreground">{idx + 1}</td>
+                          <td className="py-3 px-3 font-bold text-foreground">
+                            <Link to={art.path} className="hover:text-primary transition-colors">
+                              {art.title}
+                            </Link>
+                          </td>
+                          <td className="py-3 px-3 font-mono text-xs text-muted-foreground">
+                            {art.path}
+                          </td>
+                          <td className="py-3 px-3 text-right font-black text-primary">
+                            {art.views}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -963,54 +1006,62 @@ function AdminDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {securityLogs.map((log) => {
-                      const blocked = isIpBlocked(log.ip);
-                      return (
-                        <tr key={log.id} className="hover:bg-muted/30 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-foreground">
-                            {log.ip}
-                          </td>
-                          <td className="py-3 px-4 font-mono text-muted-foreground">
-                            {log.path}
-                          </td>
-                          <td className="py-3 px-4 text-foreground font-medium">
-                            {log.countryOrRegion}
-                          </td>
-                          <td className="py-3 px-4 text-muted-foreground font-mono text-[11px]">
-                            {new Date(log.timestamp).toLocaleTimeString()}
-                          </td>
-                          <td className="py-3 px-4">
-                            <Badge
-                              variant={blocked || log.status === "Blocked" ? "destructive" : "default"}
-                              className="text-[10px]"
-                            >
-                              {blocked || log.status === "Blocked" ? "Blocked (403)" : "Allowed (200)"}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            {blocked ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleUnblockIp(log.ip)}
-                                className="h-7 text-xs text-green-600 border-green-600/30"
+                    {securityLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-muted-foreground text-xs">
+                          No live security access events recorded yet. Incoming requests will be logged here in real time.
+                        </td>
+                      </tr>
+                    ) : (
+                      securityLogs.map((log) => {
+                        const blocked = isIpBlocked(log.ip);
+                        return (
+                          <tr key={log.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="py-3 px-4 font-mono font-bold text-foreground">
+                              {log.ip}
+                            </td>
+                            <td className="py-3 px-4 font-mono text-muted-foreground">
+                              {log.path}
+                            </td>
+                            <td className="py-3 px-4 text-foreground font-medium">
+                              {log.countryOrRegion}
+                            </td>
+                            <td className="py-3 px-4 text-muted-foreground font-mono text-[11px]">
+                              {new Date(log.timestamp).toLocaleTimeString()}
+                            </td>
+                            <td className="py-3 px-4">
+                              <Badge
+                                variant={blocked || log.status === "Blocked" ? "destructive" : "default"}
+                                className="text-[10px]"
                               >
-                                Unblock
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => handleBlockIp(log.ip, "Blocked from Live Stream")}
-                                className="h-7 text-xs gap-1 bg-red-600 hover:bg-red-700"
-                              >
-                                <Ban className="size-3" /> Block
-                              </Button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                                {blocked || log.status === "Blocked" ? "Blocked (403)" : "Allowed (200)"}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {blocked ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleUnblockIp(log.ip)}
+                                  className="h-7 text-xs text-green-600 border-green-600/30"
+                                >
+                                  Unblock
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleBlockIp(log.ip, "Blocked from Live Stream")}
+                                  className="h-7 text-xs gap-1 bg-red-600 hover:bg-red-700"
+                                >
+                                  <Ban className="size-3" /> Block
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
