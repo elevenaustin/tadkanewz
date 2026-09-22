@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import {
   BarChart3,
@@ -102,6 +102,11 @@ export const Route = createFileRoute("/admin/")({
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
+  beforeLoad: () => {
+    if (typeof window !== "undefined" && !isAuthenticatedAdmin()) {
+      throw redirect({ to: "/admin/login" });
+    }
+  },
   component: AdminDashboardPage,
 });
 
@@ -317,23 +322,39 @@ function AdminDashboardPage() {
     showToast("ਨਵਾਂ ਲੇਖ ਸਫਲਤਾਪੂਰਵਕ ਸ਼ਾਮਲ ਕੀਤਾ ਗਿਆ!");
   };
 
-  const filteredSessions = sessions.filter(
-    (s) =>
-      s.sessionId.toLowerCase().includes(sessionSearch.toLowerCase()) ||
-      (s.clientIp && s.clientIp.includes(sessionSearch)) ||
-      s.approxRegion.toLowerCase().includes(sessionSearch.toLowerCase()) ||
-      s.browser.toLowerCase().includes(sessionSearch.toLowerCase()) ||
-      s.os.toLowerCase().includes(sessionSearch.toLowerCase())
-  );
+  const filteredSessions = sessions.filter((s) => {
+    if (!s) return false;
+    const sId = (s.sessionId || "").toLowerCase();
+    const sIp = s.clientIp || "";
+    const sRegion = (s.approxRegion || "").toLowerCase();
+    const sBrowser = (s.browser || "").toLowerCase();
+    const sOs = (s.os || "").toLowerCase();
+    const q = (sessionSearch || "").toLowerCase();
+    return sId.includes(q) || sIp.includes(q) || sRegion.includes(q) || sBrowser.includes(q) || sOs.includes(q);
+  });
 
-  const filteredArticles = articleList.filter(
-    (a) =>
-      a.title.toLowerCase().includes(articleSearch.toLowerCase()) ||
-      a.category.toLowerCase().includes(articleSearch.toLowerCase()) ||
-      a.author.toLowerCase().includes(articleSearch.toLowerCase())
-  );
+  const filteredArticles = articleList.filter((a) => {
+    if (!a) return false;
+    const q = (articleSearch || "").toLowerCase();
+    return (
+      (a.title || "").toLowerCase().includes(q) ||
+      (a.category || "").toLowerCase().includes(q) ||
+      (a.author || "").toLowerCase().includes(q)
+    );
+  });
 
   const adminUser = getAdminUser();
+
+  if (typeof window !== "undefined" && !isAuthenticatedAdmin()) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/20">
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <p className="text-xs text-muted-foreground font-medium">Redirecting to admin login...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-muted/20">
@@ -866,11 +887,11 @@ function AdminDashboardPage() {
                               )}
                             </td>
                             <td className="py-3 px-4 text-muted-foreground">
-                              <div>{new Date(sess.lastActivity).toLocaleTimeString()}</div>
-                              <div className="text-[10px]">{new Date(sess.lastActivity).toLocaleDateString()}</div>
+                              <div>{sess.lastActivity ? new Date(sess.lastActivity).toLocaleTimeString() : "Just now"}</div>
+                              <div className="text-[10px]">{sess.lastActivity ? new Date(sess.lastActivity).toLocaleDateString() : ""}</div>
                             </td>
                             <td className="py-3 px-4">
-                              <span className="font-medium text-foreground">{sess.approxRegion}</span>
+                              <span className="font-medium text-foreground">{sess.approxRegion || "General Region"}</span>
                             </td>
                             <td className="py-3 px-4">
                               <div className="font-semibold text-foreground flex items-center gap-1.5">
@@ -881,13 +902,13 @@ function AdminDashboardPage() {
                                 ) : (
                                   <Laptop className="size-3 text-primary" />
                                 )}
-                                <span>{sess.deviceCategory}</span>
+                                <span>{sess.deviceCategory || "Desktop"}</span>
                               </div>
-                              <div className="text-[10px] text-muted-foreground">{sess.os}</div>
+                              <div className="text-[10px] text-muted-foreground">{sess.os || "Unknown OS"}</div>
                             </td>
                             <td className="py-3 px-4">
                               <Badge variant="outline" className="font-mono text-[11px]">
-                                {sess.pageCount} views
+                                {typeof sess.pageCount === "number" ? sess.pageCount : (Array.isArray(sess.pagesViewed) ? sess.pagesViewed.length : 1)} views
                               </Badge>
                             </td>
                             <td className="py-3 px-4">
@@ -1463,16 +1484,16 @@ function AdminDashboardPage() {
 
               <div>
                 <h4 className="font-bold text-foreground mb-2 text-xs uppercase tracking-wider text-muted-foreground">
-                  Pages Viewed ({selectedSession.pagesViewed.length})
+                  Pages Viewed ({Array.isArray(selectedSession.pagesViewed) ? selectedSession.pagesViewed.length : 0})
                 </h4>
                 <div className="max-h-40 overflow-y-auto space-y-1.5 border border-border rounded-lg p-2.5 bg-background">
-                  {selectedSession.pagesViewed.map((pv, i) => (
+                  {(selectedSession.pagesViewed || []).map((pv, i) => (
                     <div key={i} className="flex justify-between items-center text-xs py-1 border-b border-border/40 last:border-0">
                       <div className="truncate max-w-[260px] font-medium text-foreground">
-                        {pv.title || pv.path}
+                        {pv?.title || pv?.path || "Page"}
                       </div>
                       <div className="text-[10px] text-muted-foreground font-mono">
-                        {new Date(pv.timestamp).toLocaleTimeString()}
+                        {pv?.timestamp ? new Date(pv.timestamp).toLocaleTimeString() : ""}
                       </div>
                     </div>
                   ))}

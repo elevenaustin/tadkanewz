@@ -1,4 +1,5 @@
-import { FIREWALL_CHANNEL, SECURITY_CHANNEL } from "./analytics";
+export const FIREWALL_CHANNEL = "tadkanewz_prod_firewall_live_v5";
+export const SECURITY_CHANNEL = "tadkanewz_prod_security_live_v5";
 
 export type BlockedIpRecord = {
   id: string;

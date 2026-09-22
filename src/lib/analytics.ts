@@ -503,8 +503,12 @@ export function getAnalyticsSummary(): AnalyticsSummary {
   const consentCounts: Record<string, number> = {};
 
   sessions.forEach((sess) => {
-    totalPageViews += sess.pageCount;
-    if (nowMs - new Date(sess.lastActivity).getTime() <= fifteenMinsMs) {
+    if (!sess) return;
+    const pageCount = typeof sess.pageCount === "number" ? sess.pageCount : (Array.isArray(sess.pagesViewed) ? sess.pagesViewed.length : 1);
+    totalPageViews += pageCount;
+
+    const lastTime = sess.lastActivity ? new Date(sess.lastActivity).getTime() : 0;
+    if (lastTime && !isNaN(lastTime) && (nowMs - lastTime <= fifteenMinsMs)) {
       activeSessionsNow++;
     }
 
@@ -521,12 +525,15 @@ export function getAnalyticsSummary(): AnalyticsSummary {
     const ref = sess.referrer || "Direct Traffic";
     referrerCounts[ref] = (referrerCounts[ref] || 0) + 1;
 
-    sess.pagesViewed.forEach((p) => {
-      if (!pageViewCounts[p.path]) {
-        pageViewCounts[p.path] = { title: p.title, count: 0 };
-      }
-      pageViewCounts[p.path].count++;
-    });
+    if (Array.isArray(sess.pagesViewed)) {
+      sess.pagesViewed.forEach((p) => {
+        if (!p || !p.path) return;
+        if (!pageViewCounts[p.path]) {
+          pageViewCounts[p.path] = { title: p.title || p.path, count: 0 };
+        }
+        pageViewCounts[p.path].count++;
+      });
+    }
   });
 
   const topArticles = Object.entries(pageViewCounts)
