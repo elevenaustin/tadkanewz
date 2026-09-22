@@ -44,6 +44,8 @@ export function CookieConsent() {
     const isLocationPromptAnswered =
       typeof window !== "undefined" &&
       !!(
+        localStorage.getItem("tadkanewz_location_prompt_v1") ||
+        localStorage.getItem("tadkanewz_notif_prompt_v1") ||
         localStorage.getItem("tadkanewz_onboarding_prompt_v2") ||
         localStorage.getItem("tadkanewz_local_news_prompt_v1")
       );
