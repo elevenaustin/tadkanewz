@@ -1,0 +1,10 @@
+import { Link } from "@tanstack/react-router";
+import { Facebook, Instagram, Youtube } from "lucide-react";
+import { Brand } from "./brand";
+
+const links = [{ title: "TadkaNewz", items: [["About", "/about"], ["Contact", "/contact"], ["Advertise", "/advertise"], ["Write for Us", "/write"]] }, { title: "Categories", items: [["ਪੰਜਾਬ", "/category/punjab"], ["ਮਨੋਰੰਜਨ", "/category/entertainment"], ["ਖੇਡਾਂ", "/category/sports"], ["ਟੈਕਨਾਲੋਜੀ", "/category/technology"], ["ਬਿਜ਼ਨਸ", "/category/business"]] }, { title: "Legal", items: [["Privacy Policy", "/privacy"], ["Terms & Conditions", "/terms"], ["Cookie Policy", "/cookies"]] }];
+
+export function SiteFooter() { return <footer className="mt-16 border-t-4 border-primary bg-ink text-primary-foreground"><div className="mx-auto grid max-w-site gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.6fr_1fr_1fr_1fr]">
+  <div><Brand inverse /><p className="mt-4 max-w-sm text-sm leading-7 text-primary-foreground/65">ਪੰਜਾਬੀ ਵਿੱਚ ਖ਼ਬਰਾਂ, ਵਿਚਾਰ, ਕਹਾਣੀਆਂ ਅਤੇ ਜਾਣਕਾਰੀ ਲਈ ਤੁਹਾਡਾ ਆਪਣਾ ਡਿਜ਼ੀਟਲ ਪਲੇਟਫਾਰਮ।</p><div className="mt-5 flex gap-2"><a href="https://facebook.com" aria-label="Facebook" className="grid size-9 place-items-center border border-primary-foreground/20 hover:border-primary"><Facebook className="size-4" /></a><a href="https://instagram.com" aria-label="Instagram" className="grid size-9 place-items-center border border-primary-foreground/20 hover:border-primary"><Instagram className="size-4" /></a><a href="https://youtube.com" aria-label="YouTube" className="grid size-9 place-items-center border border-primary-foreground/20 hover:border-primary"><Youtube className="size-4" /></a></div></div>
+  {links.map(group => <div key={group.title}><h3 className="mb-4 border-b border-primary-foreground/15 pb-2 font-bold">{group.title}</h3><ul className="space-y-2 text-sm text-primary-foreground/65">{group.items.map(([label, to]) => <li key={label}><Link to={to} className="hover:text-primary">{label}</Link></li>)}</ul></div>)}
+  </div><div className="border-t border-primary-foreground/10 py-4 text-center text-xs text-primary-foreground/45">© 2026 TadkaNewz Media. ਸਾਰੇ ਅਧਿਕਾਰ ਰਾਖਵੇਂ ਹਨ।</div></footer>; }
