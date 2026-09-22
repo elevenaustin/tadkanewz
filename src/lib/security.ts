@@ -29,6 +29,85 @@ if (typeof window !== "undefined") {
   } catch {}
 }
 
+export const CLOUD_BLOCKED_IPS_ID = "ff808181a09d98f701a0ca0702d77126";
+export const CLOUD_SECURITY_LOGS_ID = "ff808181a09d98f701a0ca0703777127";
+
+export async function syncBlockedIpsToCloud(list: BlockedIpRecord[]): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    await fetch(`https://api.restful-api.dev/objects/${CLOUD_BLOCKED_IPS_ID}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "tadkanewz_blocked_ips_v3",
+        data: { blockedIps: list },
+      }),
+    });
+  } catch {}
+}
+
+export async function fetchRemoteBlockedIps(): Promise<BlockedIpRecord[]> {
+  if (typeof window === "undefined") return getBlockedIps();
+  try {
+    const res = await fetch(`https://api.restful-api.dev/objects/${CLOUD_BLOCKED_IPS_ID}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.data?.blockedIps)) {
+        const remote = data.data.blockedIps as BlockedIpRecord[];
+        localStorage.setItem(BLOCKED_IPS_KEY, JSON.stringify(remote));
+        return remote;
+      }
+    }
+  } catch {}
+  return getBlockedIps();
+}
+
+export async function syncSecurityLogToCloud(entry: SecurityAccessLog): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    const res = await fetch(`https://api.restful-api.dev/objects/${CLOUD_SECURITY_LOGS_ID}`, {
+      headers: { Accept: "application/json" },
+    });
+    let logs: SecurityAccessLog[] = [];
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.data?.securityLogs)) {
+        logs = data.data.securityLogs;
+      }
+    }
+    logs.unshift(entry);
+    const bounded = logs.slice(0, 100);
+    await fetch(`https://api.restful-api.dev/objects/${CLOUD_SECURITY_LOGS_ID}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "tadkanewz_security_logs_v3",
+        data: { securityLogs: bounded },
+      }),
+    });
+  } catch {}
+}
+
+export async function fetchRemoteSecurityLogs(): Promise<SecurityAccessLog[]> {
+  if (typeof window === "undefined") return getSecurityLogs();
+  try {
+    const res = await fetch(`https://api.restful-api.dev/objects/${CLOUD_SECURITY_LOGS_ID}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.data?.securityLogs)) {
+        const remote = data.data.securityLogs as SecurityAccessLog[];
+        localStorage.setItem(SECURITY_LOGS_KEY, JSON.stringify(remote));
+        return remote;
+      }
+    }
+  } catch {}
+  return getSecurityLogs();
+}
+
 export function getBlockedIps(): BlockedIpRecord[] {
   if (typeof window === "undefined") return [];
   try {
@@ -66,6 +145,7 @@ export function blockIp(ip: string, reason: string = "Unwanted / Abusive traffic
   list.unshift(newRecord);
   if (typeof window !== "undefined") {
     localStorage.setItem(BLOCKED_IPS_KEY, JSON.stringify(list));
+    syncBlockedIpsToCloud(list);
   }
   return true;
 }
@@ -78,6 +158,7 @@ export function unblockIp(ip: string): boolean {
 
   if (typeof window !== "undefined") {
     localStorage.setItem(BLOCKED_IPS_KEY, JSON.stringify(filtered));
+    syncBlockedIpsToCloud(filtered);
   }
   return true;
 }
@@ -132,6 +213,7 @@ export function logSecurityAccess(
 
     logs.unshift(entry);
     localStorage.setItem(SECURITY_LOGS_KEY, JSON.stringify(logs.slice(0, 100)));
+    syncSecurityLogToCloud(entry);
   } catch (e) {
     console.error("Failed to log security access:", e);
   }

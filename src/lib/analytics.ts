@@ -45,6 +45,7 @@ export type AnalyticsSummary = {
 const SESSIONS_STORAGE_KEY = "tadkanewz_analytics_sessions_v2";
 const RETENTION_KEY = "tadkanewz_analytics_retention_days";
 const CURRENT_SESSION_ID_KEY = "tadkanewz_current_session_id";
+export const CLOUD_SESSIONS_ID = "ff808181a09d98f701a0ca0702337125";
 
 // Automatically clear legacy demo sessions if present
 if (typeof window !== "undefined") {
@@ -269,6 +270,89 @@ export async function getClientPublicIp(): Promise<string> {
   return "127.0.0.1";
 }
 
+let syncTimeout: any = null;
+export function debouncedSyncToCloud(session: SessionRecord): void {
+  if (typeof window === "undefined" || !session) return;
+  if (syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(() => {
+    syncSessionToCloud(session).catch(() => {});
+  }, 400);
+}
+
+export async function syncSessionToCloud(session: SessionRecord): Promise<void> {
+  if (typeof window === "undefined" || !session) return;
+  try {
+    const res = await fetch(`https://api.restful-api.dev/objects/${CLOUD_SESSIONS_ID}`, {
+      headers: { Accept: "application/json" },
+    });
+    let sessions: SessionRecord[] = [];
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.data?.sessions)) {
+        sessions = data.data.sessions;
+      }
+    }
+
+    const idx = sessions.findIndex((s) => s.sessionId === session.sessionId);
+    if (idx >= 0) {
+      sessions[idx] = { ...sessions[idx], ...session };
+    } else {
+      sessions.unshift(session);
+    }
+
+    const bounded = sessions.slice(0, 300);
+
+    await fetch(`https://api.restful-api.dev/objects/${CLOUD_SESSIONS_ID}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "tadkanewz_sessions_cloud_v3",
+        data: { sessions: bounded },
+      }),
+    });
+  } catch (e) {
+    // Failover
+  }
+}
+
+export async function fetchRemoteSessions(): Promise<SessionRecord[]> {
+  if (typeof window === "undefined") return getAllSessions();
+  try {
+    const res = await fetch(`https://api.restful-api.dev/objects/${CLOUD_SESSIONS_ID}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.data?.sessions)) {
+        const remote = data.data.sessions as SessionRecord[];
+        const local = getAllSessions();
+        const map = new Map<string, SessionRecord>();
+
+        // Merge remote and local
+        [...remote, ...local].forEach((s) => {
+          if (!map.has(s.sessionId)) {
+            map.set(s.sessionId, s);
+          } else {
+            const cur = map.get(s.sessionId)!;
+            if (new Date(s.lastActivity).getTime() >= new Date(cur.lastActivity).getTime()) {
+              map.set(s.sessionId, s);
+            }
+          }
+        });
+
+        const merged = Array.from(map.values()).sort(
+          (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+        );
+        localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(merged));
+        return merged;
+      }
+    }
+  } catch (e) {
+    console.error("Cloud fetch sessions error:", e);
+  }
+  return getAllSessions();
+}
+
 export function updateSessionIp(ip: string, approxRegion?: string): void {
   if (typeof window === "undefined" || !ip) return;
   try {
@@ -282,6 +366,7 @@ export function updateSessionIp(ip: string, approxRegion?: string): void {
         current.approxRegion = approxRegion;
       }
       localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
+      debouncedSyncToCloud(current);
     }
   } catch (e) {
     console.error("Failed to update session IP:", e);
@@ -354,6 +439,9 @@ export function recordPageView(path: string, title?: string): void {
     // Cap total sessions stored to 500 to keep localStorage optimal
     const boundedSessions = sessions.slice(0, 500);
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(boundedSessions));
+
+    // Sync to shared cloud database immediately
+    debouncedSyncToCloud(currentSession);
 
     // Asynchronously resolve real public IP in background
     getClientPublicIp().then((realIp) => {
@@ -470,6 +558,14 @@ export function getAnalyticsSummary(): AnalyticsSummary {
 export function clearAllAnalyticsData(): void {
   if (typeof window !== "undefined") {
     localStorage.removeItem(SESSIONS_STORAGE_KEY);
+    fetch(`https://api.restful-api.dev/objects/${CLOUD_SESSIONS_ID}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "tadkanewz_sessions_cloud_v3",
+        data: { sessions: [] },
+      }),
+    }).catch(() => {});
   }
 }
 
@@ -488,6 +584,7 @@ export function updateSessionLocation(locationLabel: string, coords?: string): v
       };
       current.approxRegion = `${locationLabel} (Consented)`;
       localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
+      debouncedSyncToCloud(current);
     }
   } catch (e) {
     console.error("Failed to update session location:", e);

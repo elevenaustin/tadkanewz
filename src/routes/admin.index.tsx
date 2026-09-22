@@ -71,6 +71,7 @@ import {
 import {
   getAnalyticsSummary,
   getAllSessions,
+  fetchRemoteSessions,
   getRetentionPeriodDays,
   setRetentionPeriodDays,
   clearAllAnalyticsData,
@@ -84,6 +85,8 @@ import {
   unblockIp,
   isIpBlocked,
   getSecurityLogs,
+  fetchRemoteBlockedIps,
+  fetchRemoteSecurityLogs,
   type BlockedIpRecord,
   type SecurityAccessLog,
 } from "@/lib/security";
@@ -136,17 +139,36 @@ function AdminDashboardPage() {
     }
     loadData();
     setRetentionDays(getRetentionPeriodDays());
+
+    // Auto-poll cloud every 5 seconds for live remote mobile visits
+    const pollInterval = setInterval(() => {
+      loadData(false);
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
   }, [navigate]);
 
-  const loadData = () => {
+  const loadData = (showLoading = true) => {
     pruneOldSessions();
-    const sum = getAnalyticsSummary();
-    const sess = getAllSessions();
-    setSummary(sum);
-    setSessions(sess);
+    setSummary(getAnalyticsSummary());
+    setSessions(getAllSessions());
     setAuditLogs(getAuditLogs());
     setBlockedIps(getBlockedIps());
     setSecurityLogs(getSecurityLogs());
+
+    // Asynchronously fetch latest remote sessions from all mobile/desktop devices
+    fetchRemoteSessions().then((remoteSessions) => {
+      setSessions(remoteSessions);
+      setSummary(getAnalyticsSummary());
+    });
+
+    fetchRemoteBlockedIps().then((remoteBlocked) => {
+      setBlockedIps(remoteBlocked);
+    });
+
+    fetchRemoteSecurityLogs().then((remoteSecLogs) => {
+      setSecurityLogs(remoteSecLogs);
+    });
   };
 
   const handleLogout = () => {
